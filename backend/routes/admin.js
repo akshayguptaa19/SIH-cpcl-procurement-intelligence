@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import db from '../db/database.js';
+import User from '../models/User.js';
 import { verifyToken, requireRole } from '../middleware/authMiddleware.js';
 import { logAuditAction } from '../services/auditService.js';
 import { createNotification } from '../services/notificationService.js';
@@ -10,81 +10,99 @@ const router = Router();
 router.use(verifyToken, requireRole(['ADMIN', 'OFFICER']));
 
 // GET /api/admin/officers/pending
-router.get('/officers/pending', (req, res) => {
-  const pendingOfficers = db.query(`
-    SELECT u.id, u.email, COALESCE(u.full_name, u.name) AS full_name, u.phone, u.created_at,
-           op.department, op.designation, op.employee_id, op.approval_status
-    FROM users u
-    JOIN officer_profiles op ON op.user_id = u.id
-    WHERE op.approval_status IN ('PENDING', 'PENDING_APPROVAL')
-    ORDER BY u.created_at DESC
-  `);
-  return res.json(pendingOfficers);
+router.get('/officers/pending', async (req, res) => {
+  try {
+    const pendingOfficers = await User.find({
+      role: { $in: ['PROCUREMENT_OFFICER', 'SENIOR_OFFICER', 'COMPLIANCE_REVIEWER', 'OFFICER'] },
+      'officer_profile.approval_status': { $in: ['PENDING', 'PENDING_APPROVAL'] }
+    }, { password_hash: 0 }).sort({ created_at: -1 }).lean();
+
+    return res.json(pendingOfficers.map(u => ({
+      id: u.id,
+      email: u.email,
+      full_name: u.full_name || u.name,
+      phone: u.phone,
+      created_at: u.created_at,
+      department: u.officer_profile?.department,
+      designation: u.officer_profile?.designation,
+      employee_id: u.officer_profile?.employee_id,
+      approval_status: u.officer_profile?.approval_status
+    })));
+  } catch (err) {
+    console.error('[Admin GET /officers/pending]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // POST /api/admin/officers/:id/approve
-router.post('/officers/:id/approve', (req, res) => {
-  const userId = req.params.id;
-  const user = db.queryOne('SELECT * FROM users WHERE id = ?', [userId]);
-  if (!user) return res.status(404).json({ error: 'User not found' });
+router.post('/officers/:id/approve', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const user = await User.findOne({ id: userId });
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
-  db.transaction(() => {
-    db.execute("UPDATE users SET status = 'ACTIVE', is_active = 1 WHERE id = ?", [userId]);
-    db.execute("UPDATE officer_profiles SET approval_status = 'APPROVED' WHERE user_id = ?", [userId]);
-  });
+    user.status = 'ACTIVE';
+    user.is_active = 1;
+    if (user.officer_profile) user.officer_profile.approval_status = 'APPROVED';
+    await user.save();
 
-  logAuditAction({
-    userId: req.user.id,
-    userName: req.user.full_name || req.user.name,
-    userRole: req.user.role,
-    action: 'OFFICER_ACCOUNT_APPROVED',
-    entityType: 'USER',
-    entityId: userId,
-    details: { approvedOfficer: user.full_name || user.name, approvedEmail: user.email }
-  });
+    await logAuditAction({
+      userId: req.user.id, userName: req.user.full_name || req.user.name, userRole: req.user.role,
+      action: 'OFFICER_ACCOUNT_APPROVED', entityType: 'USER', entityId: userId,
+      details: { approvedOfficer: user.full_name || user.name, approvedEmail: user.email }
+    });
 
-  createNotification({
-    userId,
-    role: 'OFFICER',
-    type: 'SYSTEM',
-    title: 'CPCL Officer Account Approved',
-    message: 'Your official credentials have been verified by the Chief Vigilance Directorate. Full verification console access granted.'
-  });
+    await createNotification({
+      userId, role: 'OFFICER', type: 'SYSTEM',
+      title: 'CPCL Officer Account Approved',
+      message: 'Your official credentials have been verified by the Chief Vigilance Directorate. Full verification console access granted.'
+    });
 
-  return res.json({ message: 'Officer approved and activated successfully', userId });
+    return res.json({ message: 'Officer approved and activated successfully', userId });
+  } catch (err) {
+    console.error('[Admin POST /officers/:id/approve]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // POST /api/admin/officers/:id/reject
-router.post('/officers/:id/reject', (req, res) => {
-  const userId = req.params.id;
-  const { reason } = req.body;
+router.post('/officers/:id/reject', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { reason } = req.body;
 
-  db.transaction(() => {
-    db.execute("UPDATE users SET status = 'REJECTED', is_active = 0 WHERE id = ?", [userId]);
-    db.execute("UPDATE officer_profiles SET approval_status = 'REJECTED' WHERE user_id = ?", [userId]);
-  });
+    await User.updateOne({ id: userId }, { $set: { status: 'REJECTED', is_active: 0, 'officer_profile.approval_status': 'REJECTED' } });
 
-  logAuditAction({
-    userId: req.user.id,
-    userName: req.user.full_name,
-    userRole: req.user.role,
-    action: 'OFFICER_ACCOUNT_REJECTED',
-    entityType: 'USER',
-    entityId: userId,
-    details: { reason }
-  });
+    await logAuditAction({
+      userId: req.user.id, userName: req.user.full_name || req.user.name, userRole: req.user.role,
+      action: 'OFFICER_ACCOUNT_REJECTED', entityType: 'USER', entityId: userId,
+      details: { reason }
+    });
 
-  return res.json({ message: 'Officer registration rejected', userId });
+    return res.json({ message: 'Officer registration rejected', userId });
+  } catch (err) {
+    console.error('[Admin POST /officers/:id/reject]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // GET /api/admin/users
-router.get('/users', (req, res) => {
-  const users = db.query(`
-    SELECT id, email, full_name, role, is_active, created_at, last_login_at
-    FROM users
-    ORDER BY created_at DESC
-  `);
-  return res.json(users);
+router.get('/users', async (req, res) => {
+  try {
+    const users = await User.find({}, { password_hash: 0 }).sort({ created_at: -1 }).lean();
+    return res.json(users.map(u => ({
+      id: u.id,
+      email: u.email,
+      full_name: u.full_name || u.name,
+      role: u.role,
+      is_active: u.is_active,
+      created_at: u.created_at,
+      last_login_at: u.last_login_at
+    })));
+  } catch (err) {
+    console.error('[Admin GET /users]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 export default router;

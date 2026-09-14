@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "seed": "node -e \"import('./db/seed.js').then(m => m.seedDatabase())\"",
+    "seed": "node -e \"import('./db/seedMongo.js').then(m => m.seedDatabase())\"",
     "test": "node tests/test_e2e_full.js"
   },
   "dependencies": {
@@ -15,6 +15,7 @@
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.10.0",
     "multer": "^2.3.0"
   },
   "engines": {

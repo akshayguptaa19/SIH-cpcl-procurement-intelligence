@@ -1,24 +1,21 @@
-import db from '../db/database.js';
+import Notification from '../models/Notification.js';
+import User from '../models/User.js';
 
-export function createNotification({
+export async function createNotification({
   userId,
   role = 'OFFICER',
-  type = 'SYSTEM', // 'DEADLINE', 'VERIFICATION', 'CLARIFICATION', 'RISK_ALERT', 'SYSTEM'
+  type = 'SYSTEM',
   title,
   message,
   relatedEntity = null,
   relatedId = null
 }) {
   const id = `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  db.execute(
-    `INSERT INTO notifications (id, user_id, role, type, title, message, related_entity, related_id, is_read)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-    [id, userId, role, type, title, message, relatedEntity, relatedId]
-  );
+  await Notification.create({ id, user_id: userId, role, type, title, message, related_entity: relatedEntity, related_id: relatedId, is_read: 0 });
   return { id, userId, role, type, title, message, relatedEntity, relatedId };
 }
 
-export function notifyRole({
+export async function notifyRole({
   role,
   type = 'SYSTEM',
   title,
@@ -26,39 +23,25 @@ export function notifyRole({
   relatedEntity = null,
   relatedId = null
 }) {
-  const users = db.query('SELECT id FROM users WHERE role = ? AND is_active = 1', [role]);
+  const users = await User.find({ role, is_active: 1 }, { id: 1 }).lean();
   const created = [];
   for (const user of users) {
-    created.push(createNotification({
-      userId: user.id,
-      role,
-      type,
-      title,
-      message,
-      relatedEntity,
-      relatedId
-    }));
+    created.push(await createNotification({ userId: user.id, role, type, title, message, relatedEntity, relatedId }));
   }
   return created;
 }
 
-export function getUserNotifications(userId) {
-  return db.query(
-    'SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
-    [userId]
-  );
+export async function getUserNotifications(userId) {
+  return Notification.find({ user_id: userId })
+    .sort({ created_at: -1 })
+    .limit(50)
+    .lean();
 }
 
-export function markAsRead(notificationId, userId) {
-  return db.execute(
-    'UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?',
-    [notificationId, userId]
-  );
+export async function markAsRead(notificationId, userId) {
+  return Notification.updateOne({ id: notificationId, user_id: userId }, { $set: { is_read: 1 } });
 }
 
-export function markAllAsRead(userId) {
-  return db.execute(
-    'UPDATE notifications SET is_read = 1 WHERE user_id = ?',
-    [userId]
-  );
+export async function markAllAsRead(userId) {
+  return Notification.updateMany({ user_id: userId }, { $set: { is_read: 1 } });
 }

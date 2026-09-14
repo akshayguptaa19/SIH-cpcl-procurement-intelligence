@@ -1,22 +1,28 @@
-import db from '../db/database.js';
+import SystemIntegration from '../models/SystemIntegration.js';
 
-export function getIntegrationsStatus() {
-  return db.query('SELECT * FROM system_integrations ORDER BY name ASC');
+export async function getIntegrationsStatus() {
+  return await SystemIntegration.find({}).sort({ name: 1 }).lean();
 }
 
-export function testIntegrationEndpoint(id) {
-  const integration = db.queryOne('SELECT * FROM system_integrations WHERE id = ?', [id]);
+export async function testIntegrationEndpoint(id) {
+  const integration = await SystemIntegration.findOne({ id }).lean();
   if (!integration) return null;
 
   // Simulate network latency and response check
   const randomLatency = Math.floor(Math.random() * 80) + 70;
   const isHealthy = Math.random() > 0.03;
   const newStatus = isHealthy ? 'OPERATIONAL' : 'DEGRADED';
-  const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const now = new Date();
 
-  db.execute(
-    'UPDATE system_integrations SET status = ?, response_time_ms = ?, last_sync_at = ? WHERE id = ?',
-    [newStatus, randomLatency, now, id]
+  await SystemIntegration.updateOne(
+    { id },
+    {
+      $set: {
+        status: newStatus,
+        response_time_ms: randomLatency,
+        last_sync_at: now
+      }
+    }
   );
 
   return {

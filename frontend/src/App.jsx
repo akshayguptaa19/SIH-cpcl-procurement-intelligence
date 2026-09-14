@@ -19,6 +19,7 @@ import ComplianceChecks from "./components/compliance/ComplianceChecks.jsx";
 import RiskAnalysis from "./components/risk/RiskAnalysis.jsx";
 import AIInsights from "./components/ai/AIInsights.jsx";
 import AIAssistant from "./components/ai/AIAssistant.jsx";
+import AIBidAnalyzer from "./components/ai/AIBidAnalyzer.jsx";
 import AuditTrail from "./components/audit/AuditTrail.jsx";
 import ReportsAnalytics from "./components/reports/ReportsAnalytics.jsx";
 import NotificationsView from "./components/notifications/NotificationsView.jsx";
@@ -374,6 +375,17 @@ function AppRoutes() {
           </ProtectedOfficerRoute>
         }
       />
+      <Route
+        path="/ai-analyzer"
+        element={
+          <ProtectedOfficerRoute>
+            <OfficerLayout section="ai-analyzer">
+              <AIBidAnalyzer />
+            </OfficerLayout>
+          </ProtectedOfficerRoute>
+        }
+      />
+      <Route path="/ai-bid-analyzer" element={<Navigate to="/ai-analyzer" replace />} />
       <Route
         path="/audit-trail"
         element={

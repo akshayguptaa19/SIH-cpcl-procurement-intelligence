@@ -1,4 +1,8 @@
-import db from '../db/database.js';
+import Tender from '../models/Tender.js';
+import BidApplication from '../models/BidApplication.js';
+import Company from '../models/Company.js';
+import Document from '../models/Document.js';
+import VerificationCase from '../models/VerificationCase.js';
 
 /**
  * Deterministic Rule-Based Compliance Engine
@@ -121,19 +125,19 @@ export function evaluateComplianceRules(tenderRequirements = [], company = {}, d
 /**
  * DB-Backed Compliance Evaluation
  */
-export function evaluateCompliance(applicationId, caseId) {
-  const application = db.queryOne('SELECT * FROM bid_applications WHERE id = ?', [applicationId]);
+export async function evaluateCompliance(applicationId, caseId) {
+  const application = await BidApplication.findOne({
+    $or: [{ id: applicationId }, { application_number: applicationId }]
+  }).lean();
   if (!application) return { complianceScore: 85, results: [] };
 
-  const tender = db.queryOne('SELECT * FROM tenders WHERE id = ?', [application.tender_id]);
-  const company = db.queryOne('SELECT * FROM companies WHERE id = ?', [application.company_id]) || {};
-  const documents = db.query('SELECT * FROM documents WHERE application_id = ?', [applicationId]);
-  
-  let requirements = [];
-  if (tender) {
-    requirements = db.query('SELECT * FROM tender_requirements WHERE tender_id = ?', [tender.id]);
-  }
+  const [tender, company, documents] = await Promise.all([
+    Tender.findOne({ id: application.tender_id }).lean(),
+    Company.findOne({ id: application.company_id }).lean(),
+    Document.find({ application_id: application.id }).lean()
+  ]);
 
+  let requirements = tender?.requirements || [];
   if (requirements.length === 0) {
     requirements = [
       { requirement_name: 'Minimum Annual Turnover', rule_category: 'FINANCIAL', expected_value: '50000000' },
@@ -143,35 +147,33 @@ export function evaluateCompliance(applicationId, caseId) {
     ];
   }
 
-  const results = evaluateComplianceRules(requirements, company, documents);
+  const results = evaluateComplianceRules(requirements, company || {}, documents || []);
 
-  // Clear and insert fresh checks
-  db.execute('DELETE FROM compliance_checks WHERE application_id = ?', [applicationId]);
-  for (const r of results) {
-    db.execute(
-      `INSERT INTO compliance_checks (id, application_id, case_id, requirement_name, category, expected_value, detected_value, rule_formula, result, confidence, evidence, source, review_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        `CC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        applicationId,
-        caseId,
-        r.requirementName,
-        r.category,
-        r.expectedValue,
-        r.detectedValue,
-        r.ruleFormula,
-        r.result,
-        r.confidence,
-        r.evidence,
-        r.source,
-        r.reviewStatus
-      ]
-    );
-  }
+  const formattedChecks = results.map(r => ({
+    id: `CC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    requirement_name: r.requirementName,
+    requirement_key: r.requirementName.toUpperCase().replace(/\s+/g, '_'),
+    category: r.category,
+    result: r.result,
+    evidence: r.evidence,
+    review_status: r.reviewStatus,
+    created_at: new Date()
+  }));
 
   const total = results.length;
   const passed = results.filter(r => r.result === 'PASS').length;
   const complianceScore = total > 0 ? Math.round((passed / total) * 100) : 100;
+
+  // Persist into VerificationCase checks
+  await VerificationCase.updateOne(
+    { $or: [{ id: caseId }, { application_id: application.id }] },
+    {
+      $set: {
+        checks: formattedChecks,
+        compliance_score: complianceScore
+      }
+    }
+  );
 
   return { complianceScore, results };
 }

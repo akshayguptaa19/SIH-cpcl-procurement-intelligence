@@ -1,20 +1,23 @@
 import { Router } from 'express';
-import db from '../db/database.js';
+import User from '../models/User.js';
+import Tender from '../models/Tender.js';
+import BidApplication from '../models/BidApplication.js';
+import Document from '../models/Document.js';
+import AuditLog from '../models/AuditLog.js';
 import { getIntegrationsStatus, testIntegrationEndpoint } from '../services/integrationsService.js';
 
 const router = Router();
 
 // GET /api/system/health (Public / Health check)
-router.get('/health', (req, res) => {
+router.get('/health', async (req, res) => {
   try {
-    const check = db.queryOne('SELECT 1 as alive');
-    const tableCounts = {
-      users: db.queryOne('SELECT COUNT(*) as c FROM users')?.c || 0,
-      tenders: db.queryOne('SELECT COUNT(*) as c FROM tenders')?.c || 0,
-      applications: db.queryOne('SELECT COUNT(*) as c FROM bid_applications')?.c || 0,
-      documents: db.queryOne('SELECT COUNT(*) as c FROM documents')?.c || 0,
-      auditLogs: db.queryOne('SELECT COUNT(*) as c FROM audit_logs')?.c || 0
-    };
+    const [users, tenders, applications, documents, auditLogs] = await Promise.all([
+      User.countDocuments(),
+      Tender.countDocuments(),
+      BidApplication.countDocuments(),
+      Document.countDocuments(),
+      AuditLog.countDocuments()
+    ]);
 
     return res.json({
       status: 'HEALTHY',
@@ -23,9 +26,9 @@ router.get('/health', (req, res) => {
       nodeVersion: process.version,
       platform: process.platform,
       database: {
-        engine: 'SQLite (node:sqlite native WAL mode)',
-        status: check?.alive === 1 ? 'CONNECTED' : 'DISCONNECTED',
-        tableCounts
+        engine: 'MongoDB (Mongoose ODM)',
+        status: 'CONNECTED',
+        tableCounts: { users, tenders, applications, documents, auditLogs }
       },
       memory: process.memoryUsage(),
       uptimeSeconds: Math.floor(process.uptime()),
@@ -37,16 +40,24 @@ router.get('/health', (req, res) => {
 });
 
 // GET /api/system/integrations
-router.get('/integrations', (req, res) => {
-  const integrations = getIntegrationsStatus();
-  return res.json(integrations);
+router.get('/integrations', async (req, res) => {
+  try {
+    const integrations = await getIntegrationsStatus();
+    return res.json(integrations);
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch integrations' });
+  }
 });
 
 // POST /api/system/integrations/:id/test
-router.post('/integrations/:id/test', (req, res) => {
-  const result = testIntegrationEndpoint(req.params.id);
-  if (!result) return res.status(404).json({ error: 'Integration gateway not found' });
-  return res.json({ message: 'Sovereign gateway latency test complete', integration: result });
+router.post('/integrations/:id/test', async (req, res) => {
+  try {
+    const result = await testIntegrationEndpoint(req.params.id);
+    if (!result) return res.status(404).json({ error: 'Integration gateway not found' });
+    return res.json({ message: 'Sovereign gateway latency test complete', integration: result });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to test integration endpoint' });
+  }
 });
 
 export default router;

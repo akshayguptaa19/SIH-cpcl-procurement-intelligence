@@ -220,6 +220,14 @@ export const api = {
     getHealth: () => request('/system/health'),
     getIntegrations: () => request('/system/integrations'),
     testIntegration: (id) => request(`/system/integrations/${id}/test`, { method: 'POST' })
+  },
+
+  // AI Bid Intelligence Engine
+  ai: {
+    analyzeFile: (formData) => request('/ai/analyze-file', { method: 'POST', body: formData }),
+    analyzeBid: (data) => request('/ai/analyze-bid', { method: 'POST', body: JSON.stringify(data) }),
+    getBid: (applicationId) => request(`/ai/bids/${applicationId}`),
+    submitOfficerDecision: (applicationId, data) => request(`/ai/bids/${applicationId}/officer-decision`, { method: 'POST', body: JSON.stringify(data) })
   }
 };
 

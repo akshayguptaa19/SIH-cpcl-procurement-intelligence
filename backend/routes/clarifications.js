@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import db from '../db/database.js';
+import Clarification from '../models/Clarification.js';
+import VerificationCase from '../models/VerificationCase.js';
+import Tender from '../models/Tender.js';
+import BidApplication from '../models/BidApplication.js';
+import Company from '../models/Company.js';
 import { verifyToken, requireRole } from '../middleware/authMiddleware.js';
 import { logAuditAction } from '../services/auditService.js';
 import { createNotification, notifyRole } from '../services/notificationService.js';
@@ -7,179 +11,149 @@ import { createNotification, notifyRole } from '../services/notificationService.
 const router = Router();
 
 // GET /api/clarifications
-router.get('/', verifyToken, (req, res) => {
-  const { status, tenderId, caseId } = req.query;
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    const { status, tenderId, caseId } = req.query;
+    const filter = {};
+    if (req.user.role === 'BIDDER') filter.bidder_id = req.user.id;
+    if (status) filter.status = status;
+    if (tenderId) filter.tender_id = tenderId;
+    if (caseId) filter.case_id = caseId;
 
-  let query = `
-    SELECT 
-      cl.*,
-      t.reference_number AS tender_reference,
-      t.title AS tender_title,
-      c.name AS company_name,
-      ba.application_number
-    FROM clarifications cl
-    JOIN tenders t ON t.id = cl.tender_id
-    JOIN bid_applications ba ON ba.id = cl.application_id
-    JOIN companies c ON c.id = ba.company_id
-    WHERE 1=1
-  `;
-  const params = [];
+    const list = await Clarification.find(filter).sort({ created_at: -1 }).lean();
 
-  // Bidder Isolation
-  if (req.user.role === 'BIDDER') {
-    query += ' AND cl.bidder_id = ?';
-    params.push(req.user.id);
+    const enriched = await Promise.all(list.map(async (cl) => {
+      const [tender, app] = await Promise.all([
+        Tender.findOne({ id: cl.tender_id }, { reference_number: 1, title: 1 }).lean(),
+        BidApplication.findOne({ id: cl.application_id }, { application_number: 1, company_id: 1 }).lean()
+      ]);
+      const company = app?.company_id ? await Company.findOne({ id: app.company_id }, { name: 1 }).lean() : null;
+      return {
+        ...cl,
+        tender_reference: tender?.reference_number,
+        tender_title: tender?.title,
+        company_name: company?.name,
+        application_number: app?.application_number
+      };
+    }));
+
+    return res.json(enriched);
+  } catch (err) {
+    console.error('[Clarifications GET /]', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  if (status) {
-    query += ' AND cl.status = ?';
-    params.push(status);
-  }
-  if (tenderId) {
-    query += ' AND cl.tender_id = ?';
-    params.push(tenderId);
-  }
-  if (caseId) {
-    query += ' AND cl.case_id = ?';
-    params.push(caseId);
-  }
-
-  query += ' ORDER BY cl.created_at DESC';
-
-  const list = db.query(query, params);
-  return res.json(list);
 });
 
 // POST /api/clarifications (Officer raises query to bidder)
-router.post('/', verifyToken, requireRole(['OFFICER', 'ADMIN']), (req, res) => {
-  const { caseId, applicationId, question } = req.body;
-  if (!question || (!caseId && !applicationId)) {
-    return res.status(400).json({ error: 'Question text and case or application ID are required' });
+router.post('/', verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
+  try {
+    const { caseId, applicationId, question } = req.body;
+    if (!question || (!caseId && !applicationId)) {
+      return res.status(400).json({ error: 'Question text and case or application ID are required' });
+    }
+
+    let verificationCase;
+    if (caseId) {
+      verificationCase = await VerificationCase.findOne({ id: caseId }).lean();
+    } else {
+      verificationCase = await VerificationCase.findOne({ application_id: applicationId }).lean();
+    }
+    if (!verificationCase) return res.status(404).json({ error: 'Associated verification case not found' });
+
+    const clarificationId = `CLR-${Date.now()}`;
+
+    await Clarification.create({
+      id: clarificationId,
+      case_id: verificationCase.id,
+      application_id: verificationCase.application_id,
+      tender_id: verificationCase.tender_id,
+      bidder_id: verificationCase.bidder_id,
+      question,
+      from_user: req.user.full_name || req.user.name,
+      status: 'AWAITING_RESPONSE'
+    });
+
+    await VerificationCase.updateOne({ id: verificationCase.id }, { $set: { overall_status: 'CLARIFICATION_REQUIRED' } });
+
+    await logAuditAction({
+      userId: req.user.id, userName: req.user.full_name || req.user.name, userRole: req.user.role,
+      action: 'CLARIFICATION_RAISED', entityType: 'CLARIFICATION', entityId: clarificationId,
+      details: { question, bidderId: verificationCase.bidder_id, caseId: verificationCase.id }
+    });
+
+    await createNotification({
+      userId: verificationCase.bidder_id, role: 'BIDDER', type: 'CLARIFICATION',
+      title: 'Formal Clarification Requested by Verification Officer',
+      message: question, relatedEntity: 'CLARIFICATION', relatedId: clarificationId
+    });
+
+    return res.status(201).json({ message: 'Formal clarification query dispatched to enterprise bidder', id: clarificationId, clarificationId, status: 'AWAITING_RESPONSE' });
+  } catch (err) {
+    console.error('[Clarifications POST /]', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  let verificationCase;
-  if (caseId) {
-    verificationCase = db.queryOne('SELECT * FROM verification_cases WHERE id = ?', [caseId]);
-  } else {
-    verificationCase = db.queryOne('SELECT * FROM verification_cases WHERE application_id = ?', [applicationId]);
-  }
-
-  if (!verificationCase) {
-    return res.status(404).json({ error: 'Associated verification case not found' });
-  }
-
-  const clarificationId = `CLR-${Date.now()}`;
-
-  db.transaction(() => {
-    db.execute(
-      `INSERT INTO clarifications (id, case_id, application_id, tender_id, bidder_id, question, from_user, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'AWAITING_RESPONSE')`,
-      [clarificationId, verificationCase.id, verificationCase.application_id, verificationCase.tender_id, verificationCase.bidder_id, question, req.user.full_name]
-    );
-
-    db.execute(
-      "UPDATE verification_cases SET overall_status = 'CLARIFICATION_REQUIRED', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [verificationCase.id]
-    );
-  });
-
-  logAuditAction({
-    userId: req.user.id,
-    userName: req.user.full_name,
-    userRole: req.user.role,
-    action: 'CLARIFICATION_RAISED',
-    entityType: 'CLARIFICATION',
-    entityId: clarificationId,
-    details: { question, bidderId: verificationCase.bidder_id, caseId: verificationCase.id }
-  });
-
-  createNotification({
-    userId: verificationCase.bidder_id,
-    role: 'BIDDER',
-    type: 'CLARIFICATION',
-    title: 'Formal Clarification Requested by Verification Officer',
-    message: question,
-    relatedEntity: 'CLARIFICATION',
-    relatedId: clarificationId
-  });
-
-  return res.status(201).json({
-    message: 'Formal clarification query dispatched to enterprise bidder',
-    id: clarificationId,
-    clarificationId,
-    status: 'AWAITING_RESPONSE'
-  });
 });
 
 // POST /api/clarifications/:id/respond (Bidder responds)
-router.post('/:id/respond', verifyToken, (req, res) => {
-  const { response, attachmentUrl, attachmentName } = req.body;
-  if (!response) {
-    return res.status(400).json({ error: 'Response text is mandatory' });
+router.post('/:id/respond', verifyToken, async (req, res) => {
+  try {
+    const { response, attachmentUrl, attachmentName } = req.body;
+    if (!response) return res.status(400).json({ error: 'Response text is mandatory' });
+
+    const clarification = await Clarification.findOne({ id: req.params.id });
+    if (!clarification) return res.status(404).json({ error: 'Clarification query not found' });
+
+    if (req.user.role === 'BIDDER' && clarification.bidder_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    clarification.status = 'RESPONDED';
+    clarification.response = response;
+    clarification.response_date = new Date();
+    clarification.attachment_url = attachmentUrl || null;
+    clarification.attachment_name = attachmentName || null;
+    await clarification.save();
+
+    await VerificationCase.updateOne({ id: clarification.case_id }, { $set: { overall_status: 'IN_REVIEW' } });
+
+    await logAuditAction({
+      userId: req.user.id, userName: req.user.full_name || req.user.name, userRole: req.user.role,
+      action: 'CLARIFICATION_RESPONDED', entityType: 'CLARIFICATION', entityId: clarification.id,
+      details: { response, attachmentName }
+    });
+
+    await notifyRole({
+      role: 'OFFICER', type: 'CLARIFICATION', title: 'Enterprise Submitted Clarification Response',
+      message: `Response received for query on Case ${clarification.case_id}. Ready for officer review.`,
+      relatedEntity: 'CLARIFICATION', relatedId: clarification.id
+    });
+
+    return res.json({ message: 'Response recorded and forwarded to Verification Officer', status: 'RESPONDED' });
+  } catch (err) {
+    console.error('[Clarifications POST /:id/respond]', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  const query = db.queryOne('SELECT * FROM clarifications WHERE id = ?', [req.params.id]);
-  if (!query) return res.status(404).json({ error: 'Clarification query not found' });
-
-  if (req.user.role === 'BIDDER' && query.bidder_id !== req.user.id) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-
-  const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
-
-  db.transaction(() => {
-    db.execute(
-      `UPDATE clarifications 
-       SET status = 'RESPONDED', response = ?, response_date = ?, attachment_url = ?, attachment_name = ?
-       WHERE id = ?`,
-      [response, now, attachmentUrl || null, attachmentName || null, query.id]
-    );
-
-    db.execute(
-      "UPDATE verification_cases SET overall_status = 'IN_REVIEW', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [query.case_id]
-    );
-  });
-
-  logAuditAction({
-    userId: req.user.id,
-    userName: req.user.full_name,
-    userRole: req.user.role,
-    action: 'CLARIFICATION_RESPONDED',
-    entityType: 'CLARIFICATION',
-    entityId: query.id,
-    details: { response, attachmentName }
-  });
-
-  notifyRole({
-    role: 'OFFICER',
-    type: 'CLARIFICATION',
-    title: 'Enterprise Submitted Clarification Response',
-    message: `Response received for query on Case ${query.case_id}. Ready for officer review.`,
-    relatedEntity: 'CLARIFICATION',
-    relatedId: query.id
-  });
-
-  return res.json({ message: 'Response recorded and forwarded to Verification Officer', status: 'RESPONDED' });
 });
 
 // POST /api/clarifications/:id/resolve (Officer marks resolved)
-router.post('/:id/resolve', verifyToken, requireRole(['OFFICER', 'ADMIN']), (req, res) => {
-  const query = db.queryOne('SELECT * FROM clarifications WHERE id = ?', [req.params.id]);
-  if (!query) return res.status(404).json({ error: 'Clarification query not found' });
+router.post('/:id/resolve', verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
+  try {
+    const clarification = await Clarification.findOne({ id: req.params.id });
+    if (!clarification) return res.status(404).json({ error: 'Clarification query not found' });
 
-  db.execute("UPDATE clarifications SET status = 'RESOLVED' WHERE id = ?", [query.id]);
+    clarification.status = 'RESOLVED';
+    await clarification.save();
 
-  logAuditAction({
-    userId: req.user.id,
-    userName: req.user.full_name,
-    userRole: req.user.role,
-    action: 'CLARIFICATION_RESOLVED',
-    entityType: 'CLARIFICATION',
-    entityId: query.id
-  });
+    await logAuditAction({
+      userId: req.user.id, userName: req.user.full_name || req.user.name, userRole: req.user.role,
+      action: 'CLARIFICATION_RESOLVED', entityType: 'CLARIFICATION', entityId: clarification.id
+    });
 
-  return res.json({ message: 'Clarification marked as resolved', status: 'RESOLVED' });
+    return res.json({ message: 'Clarification marked as resolved', status: 'RESOLVED' });
+  } catch (err) {
+    console.error('[Clarifications POST /:id/resolve]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 export default router;
