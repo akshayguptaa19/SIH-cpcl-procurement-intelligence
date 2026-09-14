@@ -1,73 +1,85 @@
 import { Router } from 'express';
-import db from '../db/database.js';
+import Report from '../models/Report.js';
+import Tender from '../models/Tender.js';
+import BidApplication from '../models/BidApplication.js';
+import VerificationCase from '../models/VerificationCase.js';
+import User from '../models/User.js';
 import { verifyToken, requireRole } from '../middleware/authMiddleware.js';
 import { logAuditAction } from '../services/auditService.js';
 
 const router = Router();
 
 // GET /api/reports/executive-summary
-router.get('/executive-summary', verifyToken, (req, res) => {
-  const totalTenders = db.queryOne("SELECT COUNT(*) as count FROM tenders");
-  const totalBids = db.queryOne("SELECT COUNT(*) as count FROM bid_applications");
-  const compliantBids = db.queryOne("SELECT COUNT(*) as count FROM bid_applications WHERE status IN ('QUALIFIED', 'COMPLIANT', 'APPROVED')");
-  const flaggedBids = db.queryOne("SELECT COUNT(*) as count FROM verification_findings WHERE severity IN ('HIGH', 'CRITICAL')");
+router.get('/executive-summary', verifyToken, async (req, res) => {
+  try {
+    const [totalTenders, totalBids, compliantBids] = await Promise.all([
+      Tender.countDocuments(),
+      BidApplication.countDocuments(),
+      BidApplication.countDocuments({ status: { $in: ['QUALIFIED', 'COMPLIANT', 'APPROVED'] } })
+    ]);
 
-  return res.json({
-    summary: {
-      totalTenders: totalTenders ? totalTenders.count : 0,
-      totalBids: totalBids ? totalBids.count : 0,
-      compliantBids: compliantBids ? compliantBids.count : 0,
-      flaggedBids: flaggedBids ? flaggedBids.count : 0,
-      complianceRate: totalBids && totalBids.count > 0 ? Math.round((compliantBids.count / totalBids.count) * 100) : 88
-    },
-    generatedAt: new Date().toISOString()
-  });
+    // Count high/critical findings across embedded arrays
+    const flaggedResult = await VerificationCase.aggregate([
+      { $unwind: '$findings' },
+      { $match: { 'findings.severity': { $in: ['HIGH', 'CRITICAL'] } } },
+      { $count: 'total' }
+    ]);
+    const flaggedBids = flaggedResult[0]?.total || 0;
+
+    return res.json({
+      summary: {
+        totalTenders,
+        totalBids,
+        compliantBids,
+        flaggedBids,
+        complianceRate: totalBids > 0 ? Math.round((compliantBids / totalBids) * 100) : 88
+      },
+      generatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('[Reports GET /executive-summary]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // GET /api/reports
-router.get('/', verifyToken, (req, res) => {
-  const reports = db.query(`
-    SELECT r.*, COALESCE(u.full_name, u.name) AS generated_by_name
-    FROM reports r
-    LEFT JOIN users u ON u.id = r.generated_by
-    ORDER BY r.created_at DESC
-  `);
-  return res.json(reports);
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    const reports = await Report.find({}).sort({ created_at: -1 }).lean();
+    // Enrich with generator name
+    const enriched = await Promise.all(reports.map(async (r) => {
+      const u = r.generated_by ? await User.findOne({ id: r.generated_by }, { full_name: 1, name: 1 }).lean() : null;
+      return { ...r, generated_by_name: u?.full_name || u?.name };
+    }));
+    return res.json(enriched);
+  } catch (err) {
+    console.error('[Reports GET /]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // POST /api/reports/generate
-router.post('/generate', verifyToken, requireRole(['OFFICER', 'ADMIN']), (req, res) => {
-  const { title, reportType, filters = {} } = req.body;
-  if (!title || !reportType) {
-    return res.status(400).json({ error: 'Title and report type are required' });
+router.post('/generate', verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
+  try {
+    const { title, reportType, filters = {} } = req.body;
+    if (!title || !reportType) return res.status(400).json({ error: 'Title and report type are required' });
+
+    const reportId = `RPT-${Date.now()}`;
+    const fileUrl = `/uploads/reports/${reportId}.pdf`;
+
+    await Report.create({ id: reportId, title, report_type: reportType, generated_by: req.user.id, format: 'PDF', filters, file_url: fileUrl });
+
+    await logAuditAction({
+      userId: req.user.id, userName: req.user.full_name || req.user.name, userRole: req.user.role,
+      action: 'REPORT_GENERATED', entityType: 'REPORT', entityId: reportId,
+      details: { title, reportType }
+    });
+
+    return res.status(201).json({ message: 'Audit compliance dossier generated successfully', id: reportId, title, reportType, fileUrl });
+  } catch (err) {
+    console.error('[Reports POST /generate]', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  const reportId = `RPT-${Date.now()}`;
-  const fileUrl = `/uploads/reports/${reportId}.pdf`;
-
-  db.execute(
-    `INSERT INTO reports (id, title, report_type, generated_by, format, filters_json, file_url)
-     VALUES (?, ?, ?, ?, 'PDF', ?, ?)`,
-    [reportId, title, reportType, req.user.id, JSON.stringify(filters), fileUrl]
-  );
-
-  logAuditAction({
-    userId: req.user.id,
-    userName: req.user.full_name,
-    userRole: req.user.role,
-    action: 'REPORT_GENERATED',
-    entityType: 'REPORT',
-    entityId: reportId,
-    details: { title, reportType }
-  });
-
-  return res.status(201).json({
-    message: 'Audit compliance dossier generated successfully',
-    id: reportId,
-    title,
-    reportType,
-    fileUrl
-  });
 });
 
 export default router;

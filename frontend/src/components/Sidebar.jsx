@@ -15,7 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Sparkles
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useProcurement } from "@/context/ProcurementContext";
@@ -69,6 +70,7 @@ const SAAS_NAV_SECTIONS = [
   {
     title: "INTELLIGENCE",
     items: [
+      { id: "ai-analyzer", label: "AI Bid Analyzer", icon: Sparkles, badge: "AI" },
       { id: "ai-insights", label: "AI Insights", icon: Brain },
       { id: "risk-analysis", label: "Risk Analysis", icon: ShieldAlert },
       { id: "reports", label: "Reports", icon: BarChart3 }

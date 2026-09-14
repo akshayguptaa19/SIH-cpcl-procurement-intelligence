@@ -1,4 +1,7 @@
-import db from '../db/database.js';
+import VerificationCase from '../models/VerificationCase.js';
+import Document from '../models/Document.js';
+import BidApplication from '../models/BidApplication.js';
+import Company from '../models/Company.js';
 
 /**
  * Risk Assessment & Anomaly Detection Engine
@@ -61,18 +64,21 @@ export function calculateRiskAssessment(complianceResults = [], documents = [], 
 /**
  * DB-backed Risk Calculation & Persistence
  */
-export function calculateRisk(applicationId, caseId) {
-  const complianceChecks = db.query('SELECT * FROM compliance_checks WHERE application_id = ?', [applicationId]);
-  const documents = db.query('SELECT * FROM documents WHERE application_id = ?', [applicationId]);
-  const application = db.queryOne('SELECT * FROM bid_applications WHERE id = ?', [applicationId]);
-  const company = application ? db.queryOne('SELECT * FROM companies WHERE id = ?', [application.company_id]) : {};
+export async function calculateRisk(applicationId, caseId) {
+  const application = await BidApplication.findOne({
+    $or: [{ id: applicationId }, { application_number: applicationId }]
+  }).lean();
+  const vCase = await VerificationCase.findOne({
+    $or: [{ id: caseId }, { application_id: applicationId }]
+  }).lean();
 
-  const assessment = calculateRiskAssessment(complianceChecks, documents, company);
+  const complianceChecks = vCase?.checks || [];
+  const documents = await Document.find({ application_id: applicationId }).lean();
+  const company = application?.company_id ? await Company.findOne({ id: application.company_id }).lean() : {};
 
-  // Clear previous risk assessments
-  db.execute('DELETE FROM risk_assessments WHERE application_id = ?', [applicationId]);
+  const assessment = calculateRiskAssessment(complianceChecks, documents, company || {});
 
-  // Insert categorized risk records
+  // Categorized risk records
   const categories = [
     { cat: 'FINANCIAL', score: Math.min(100, assessment.riskScore * 0.9), factors: ['Turnover consistency', 'Solvency liquidity'] },
     { cat: 'DOCUMENT', score: Math.min(100, assessment.riskScore * 1.1), factors: ['OCR signature validation', 'UDIN attestation'] },
@@ -80,27 +86,36 @@ export function calculateRisk(applicationId, caseId) {
     { cat: 'IDENTITY', score: 10.0, factors: ['MCA21 Director Registry Match', 'Sovereign PAN Verification'] }
   ];
 
-  for (const c of categories) {
+  const riskAssessments = categories.map(c => {
     let level = 'LOW';
     if (c.score >= 75) level = 'CRITICAL';
     else if (c.score >= 50) level = 'HIGH';
     else if (c.score >= 25) level = 'MEDIUM';
 
-    db.execute(
-      `INSERT INTO risk_assessments (id, application_id, case_id, risk_category, risk_score, risk_level, risk_factors_json, evidence)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        `RA-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        applicationId,
-        caseId,
-        c.cat,
-        c.score,
-        level,
-        JSON.stringify(c.factors),
-        assessment.evidence
-      ]
-    );
-  }
+    return {
+      id: `RA-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      risk_category: c.cat,
+      risk_score: c.score,
+      risk_level: level,
+      risk_factors: c.factors,
+      description: assessment.evidence,
+      created_at: new Date()
+    };
+  });
+
+  const effectiveCaseId = vCase ? vCase.id : caseId;
+
+  await VerificationCase.updateOne(
+    { id: effectiveCaseId },
+    {
+      $set: {
+        risk_score: assessment.riskScore,
+        risk_level: assessment.riskLevel,
+        risk_assessments: riskAssessments
+      }
+    },
+    { upsert: true }
+  );
 
   return {
     overallRiskScore: assessment.riskScore,

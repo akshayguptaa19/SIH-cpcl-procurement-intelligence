@@ -4,6 +4,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+// DB & Models
+import { connectDB } from './db/database.js';
+import { seedDatabase } from './db/seedMongo.js';
+
 // Routes
 import authRouter from './routes/auth.js';
 import tendersRouter from './routes/tenders.js';
@@ -21,10 +25,7 @@ import notificationsRouter from './routes/notifications.js';
 import adminRouter from './routes/admin.js';
 import dashboardRouter from './routes/dashboard.js';
 import systemRouter from './routes/system.js';
-import { seedDatabase } from './db/seed.js';
-
-// Auto-seed database with default records if empty
-seedDatabase().catch(err => console.error('[DB Seed Boot Error]:', err));
+import aiRouter from './routes/ai.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,15 +33,17 @@ const __dirname = path.dirname(__filename);
 // Ensure storage directories exist
 const uploadsDir = path.join(__dirname, 'uploads');
 const reportsDir = path.join(uploadsDir, 'reports');
+const bidsDir = path.join(uploadsDir, 'bids');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+if (!fs.existsSync(bidsDir)) fs.mkdirSync(bidsDir, { recursive: true });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Security & Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'],
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001', 'http://127.0.0.1:5173'],
   credentials: true
 }));
 app.use(express.json({ limit: '20mb' }));
@@ -66,13 +69,15 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/system', systemRouter);
+app.use('/api/ai', aiRouter);
 
 // Root Status
 app.get('/api', (req, res) => {
   res.json({
     platform: 'CPCL AI Procurement Intelligence Platform (MoPNG Sovereign Network)',
-    version: '2.4.0',
+    version: '3.0.0',
     status: 'ONLINE',
+    database: 'MongoDB (Mongoose ODM)',
     documentation: '/api/system/health'
   });
 });
@@ -91,11 +96,26 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`=======================================================`);
-  console.log(`🚀 CPCL Sovereign API Server running on port ${PORT}`);
-  console.log(`🔗 Health Check: http://localhost:${PORT}/api/system/health`);
-  console.log(`🛡️  Database: SQLite WAL Mode (node:sqlite native)`);
-  console.log(`📁 Uploads Directory: ${uploadsDir}`);
-  console.log(`=======================================================`);
-});
+// Initialize database and start server
+async function startServer() {
+  try {
+    await connectDB();
+    await seedDatabase();
+  } catch (err) {
+    console.error('[Database Startup Error]:', err.message);
+    console.warn('[Server Startup Warning]: MongoDB connection failed or deferred. Server will continue running.');
+  }
+
+  app.listen(PORT, () => {
+    console.log(`=======================================================`);
+    console.log(`🚀 CPCL Sovereign API Server running on port ${PORT}`);
+    console.log(`🔗 Health Check: http://localhost:${PORT}/api/system/health`);
+    console.log(`🛡️  Database: MongoDB (Mongoose ODM)`);
+    console.log(`📁 Uploads Directory: ${uploadsDir}`);
+    console.log(`=======================================================`);
+  });
+}
+
+startServer();
+
+export default app;

@@ -1,5 +1,11 @@
 import { Router } from 'express';
-import db from '../db/database.js';
+import VerificationCase from '../models/VerificationCase.js';
+import BidApplication from '../models/BidApplication.js';
+import Tender from '../models/Tender.js';
+import Company from '../models/Company.js';
+import Document from '../models/Document.js';
+import Clarification from '../models/Clarification.js';
+import User from '../models/User.js';
 import { verifyToken, requireRole } from '../middleware/authMiddleware.js';
 import { logAuditAction } from '../services/auditService.js';
 import { createNotification, notifyRole } from '../services/notificationService.js';
@@ -7,330 +13,267 @@ import { createNotification, notifyRole } from '../services/notificationService.
 const router = Router();
 
 // GET /api/verification/queue (Officer/Admin only)
-router.get('/queue', verifyToken, requireRole(['OFFICER', 'ADMIN']), (req, res) => {
-  const { status, riskLevel, search } = req.query;
+router.get('/queue', verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
+  try {
+    const { status, riskLevel, search } = req.query;
+    const filter = {};
+    if (status) filter.overall_status = status;
+    if (riskLevel) filter.risk_level = riskLevel;
 
-  let query = `
-    SELECT 
-      vc.*,
-      ba.application_number,
-      ba.submitted_at,
-      t.reference_number AS tender_reference,
-      t.title AS tender_title,
-      t.category AS tender_category,
-      t.estimated_value,
-      c.id AS company_id,
-      c.name AS company_name,
-      c.gstin,
-      c.pan,
-      c.is_msme,
-      (SELECT COUNT(*) FROM documents d WHERE d.application_id = ba.id) AS document_count,
-      (SELECT COUNT(*) FROM verification_findings vf WHERE vf.case_id = vc.id AND vf.severity IN ('HIGH', 'CRITICAL')) AS critical_flags_count
-    FROM verification_cases vc
-    JOIN bid_applications ba ON ba.id = vc.application_id
-    JOIN tenders t ON t.id = vc.tender_id
-    JOIN companies c ON c.id = vc.company_id
-    WHERE 1=1
-  `;
-  const params = [];
+    const cases = await VerificationCase.find(filter).sort({ created_at: -1 }).lean();
 
-  if (status) {
-    query += ' AND vc.overall_status = ?';
-    params.push(status);
+    const enriched = await Promise.all(cases.map(async (vc) => {
+      const [app, tender, company] = await Promise.all([
+        BidApplication.findOne({ id: vc.application_id }, { application_number: 1, submitted_at: 1 }).lean(),
+        Tender.findOne({ id: vc.tender_id }, { reference_number: 1, title: 1, category: 1, estimated_value: 1 }).lean(),
+        Company.findOne({ id: vc.company_id }, { id: 1, name: 1, gstin: 1, pan: 1, is_msme: 1 }).lean()
+      ]);
+
+      // Apply search filter if needed
+      if (search) {
+        const term = search.toLowerCase();
+        const companyMatch = company?.name?.toLowerCase().includes(term);
+        const tenderMatch = tender?.reference_number?.toLowerCase().includes(term);
+        const appMatch = app?.application_number?.toLowerCase().includes(term);
+        if (!companyMatch && !tenderMatch && !appMatch) return null;
+      }
+
+      const docCount = await Document.countDocuments({ application_id: vc.application_id });
+      const criticalFlags = (vc.findings || []).filter(f => f.severity === 'HIGH' || f.severity === 'CRITICAL').length;
+
+      return {
+        ...vc,
+        application_number: app?.application_number,
+        submitted_at: app?.submitted_at,
+        tender_reference: tender?.reference_number,
+        tender_title: tender?.title,
+        tender_category: tender?.category,
+        estimated_value: tender?.estimated_value,
+        company_id: company?.id,
+        company_name: company?.name,
+        gstin: company?.gstin,
+        pan: company?.pan,
+        is_msme: company?.is_msme,
+        document_count: docCount,
+        critical_flags_count: criticalFlags
+      };
+    }));
+
+    return res.json(enriched.filter(Boolean));
+  } catch (err) {
+    console.error('[Verification GET /queue]', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-  if (riskLevel) {
-    query += ' AND vc.risk_level = ?';
-    params.push(riskLevel);
-  }
-  if (search) {
-    query += ' AND (c.name LIKE ? OR t.reference_number LIKE ? OR ba.application_number LIKE ?)';
-    const term = `%${search}%`;
-    params.push(term, term, term);
-  }
-
-  query += ' ORDER BY vc.created_at DESC';
-
-  const cases = db.query(query, params);
-  return res.json(cases);
 });
 
 // GET /api/verification/cases/:id (Full 3-Column Workspace Detail)
-router.get('/cases/:id', verifyToken, requireRole(['OFFICER', 'ADMIN']), (req, res) => {
-  const caseId = req.params.id;
+router.get('/cases/:id', verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
+  try {
+    const caseId = req.params.id;
+    const verificationCase = await VerificationCase.findOne({
+      $or: [{ id: caseId }, { application_id: caseId }]
+    }).lean();
 
-  const verificationCase = db.queryOne(
-    `SELECT 
-       vc.*,
-       ba.id AS app_id,
-       ba.application_number,
-       ba.submitted_at,
-       ba.status AS application_status,
-       t.id AS tender_pk,
-       t.reference_number AS tender_reference,
-       t.title AS tender_title,
-       t.estimated_value,
-       t.submission_deadline,
-       c.id AS company_id,
-       c.name AS company_name,
-       c.registration_number,
-       c.gstin,
-       c.pan,
-       c.is_msme,
-       c.address,
-       c.state,
-       u.email AS bidder_email,
-       u.full_name AS bidder_contact_name,
-       u.phone AS bidder_phone
-     FROM verification_cases vc
-     JOIN bid_applications ba ON ba.id = vc.application_id
-     JOIN tenders t ON t.id = vc.tender_id
-     JOIN companies c ON c.id = vc.company_id
-     JOIN users u ON u.id = vc.bidder_id
-     WHERE vc.id = ? OR vc.application_id = ?`,
-    [caseId, caseId]
-  );
+    if (!verificationCase) return res.status(404).json({ error: 'Verification case not found' });
 
-  if (!verificationCase) {
-    return res.status(404).json({ error: 'Verification case not found' });
+    const [app, tender, company, bidderUser, documents, clarifications] = await Promise.all([
+      BidApplication.findOne({ id: verificationCase.application_id }).lean(),
+      Tender.findOne({ id: verificationCase.tender_id }).lean(),
+      Company.findOne({ id: verificationCase.company_id }).lean(),
+      User.findOne({ id: verificationCase.bidder_id }, { email: 1, full_name: 1, name: 1, phone: 1 }).lean(),
+      Document.find({ application_id: verificationCase.application_id }).sort({ uploaded_at: 1 }).lean(),
+      Clarification.find({ case_id: verificationCase.id }).sort({ created_at: -1 }).lean()
+    ]);
+
+    const enrichedDocs = documents.map(doc => ({
+      ...doc,
+      extracted_data: doc.ocr?.extracted_data || null,
+      extracted_data_json: doc.ocr?.extracted_data ? JSON.stringify(doc.ocr.extracted_data) : null,
+      ocr_confidence: doc.ocr?.confidence || null
+    }));
+
+    const sovereignChecks = {
+      gstn: { status: 'VERIFIED', legalName: company?.name, gstin: company?.gstin, activeSince: '01/07/2017', filingStatus: 'Current & Up-to-date (98% Compliance)' },
+      mca21: { status: 'VERIFIED', cin: company?.registration_number, companyStatus: 'Active', paidUpCapital: '₹10,00,00,000' },
+      panGateway: { status: 'VERIFIED', pan: company?.pan, linkageStatus: 'Aadhaar/Entity Seeding Confirmed' }
+    };
+
+    const fullCase = {
+      ...verificationCase,
+      app_id: app?.id,
+      application_number: app?.application_number,
+      submitted_at: app?.submitted_at,
+      application_status: app?.status,
+      tender_pk: tender?.id,
+      tender_reference: tender?.reference_number,
+      tender_title: tender?.title,
+      estimated_value: tender?.estimated_value,
+      submission_deadline: tender?.submission_deadline,
+      company_id: company?.id,
+      company_name: company?.name,
+      registration_number: company?.registration_number,
+      gstin: company?.gstin,
+      pan: company?.pan,
+      is_msme: company?.is_msme,
+      address: company?.address,
+      state: company?.state,
+      bidder_email: bidderUser?.email,
+      bidder_contact_name: bidderUser?.full_name || bidderUser?.name,
+      bidder_phone: bidderUser?.phone
+    };
+
+    return res.json({
+      case: fullCase,
+      documents: enrichedDocs,
+      findings: verificationCase.findings || [],
+      complianceChecks: verificationCase.checks || [],
+      riskAssessments: (verificationCase.risk_assessments || []).map(ra => ({ ...ra, risk_factors: ra.risk_factors || [] })),
+      clarifications,
+      sovereignChecks
+    });
+  } catch (err) {
+    console.error('[Verification GET /cases/:id]', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  // Documents + OCR Extractions
-  const documents = db.query(
-    `SELECT d.*, 
-            oe.extracted_data_json, oe.confidence AS ocr_confidence
-     FROM documents d
-     LEFT JOIN ocr_extractions oe ON oe.document_id = d.id
-     WHERE d.application_id = ?
-     ORDER BY d.uploaded_at ASC`,
-    [verificationCase.application_id]
-  ).map(doc => ({
-    ...doc,
-    extracted_data: doc.extracted_data_json ? JSON.parse(doc.extracted_data_json) : null
-  }));
-
-  // Findings
-  const findings = db.query(
-    'SELECT * FROM verification_findings WHERE case_id = ? ORDER BY severity DESC, confidence DESC',
-    [verificationCase.id]
-  );
-
-  // Compliance Checks
-  const complianceChecks = db.query(
-    'SELECT * FROM compliance_checks WHERE case_id = ? ORDER BY category, requirement_name',
-    [verificationCase.id]
-  );
-
-  // Risk Assessments
-  const riskAssessments = db.query(
-    'SELECT * FROM risk_assessments WHERE case_id = ?',
-    [verificationCase.id]
-  ).map(ra => ({
-    ...ra,
-    risk_factors: ra.risk_factors_json ? JSON.parse(ra.risk_factors_json) : []
-  }));
-
-  // Clarifications
-  const clarifications = db.query(
-    'SELECT * FROM clarifications WHERE case_id = ? ORDER BY created_at DESC',
-    [verificationCase.id]
-  );
-
-  // Sovereign Integrations Quick Verification State
-  const sovereignChecks = {
-    gstn: {
-      status: 'VERIFIED',
-      legalName: verificationCase.company_name,
-      gstin: verificationCase.gstin,
-      activeSince: '01/07/2017',
-      filingStatus: 'Current & Up-to-date (98% Compliance)'
-    },
-    mca21: {
-      status: 'VERIFIED',
-      cin: verificationCase.registration_number,
-      companyStatus: 'Active',
-      paidUpCapital: '₹10,00,00,000'
-    },
-    panGateway: {
-      status: 'VERIFIED',
-      pan: verificationCase.pan,
-      linkageStatus: 'Aadhaar/Entity Seeding Confirmed'
-    }
-  };
-
-  return res.json({
-    case: verificationCase,
-    documents,
-    findings,
-    complianceChecks,
-    riskAssessments,
-    clarifications,
-    sovereignChecks
-  });
 });
 
 // POST /api/verification/cases/:id/approve
-router.post('/cases/:id/approve', verifyToken, requireRole(['OFFICER', 'ADMIN']), (req, res) => {
-  const { remarks } = req.body;
-  const verificationCase = db.queryOne('SELECT * FROM verification_cases WHERE id = ?', [req.params.id]);
-  if (!verificationCase) return res.status(404).json({ error: 'Verification case not found' });
+router.post('/cases/:id/approve', verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
+  try {
+    const { remarks } = req.body;
+    const verificationCase = await VerificationCase.findOne({ id: req.params.id });
+    if (!verificationCase) return res.status(404).json({ error: 'Verification case not found' });
 
-  const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const prevStatus = verificationCase.overall_status;
+    verificationCase.overall_status = 'APPROVED';
+    verificationCase.officer_remarks = remarks || 'Technical & Statutory Compliance Verified by CPCL Officer';
+    verificationCase.assigned_officer_id = req.user.id;
+    verificationCase.reviewed_at = new Date();
+    await verificationCase.save();
 
-  db.transaction(() => {
-    db.execute(
-      `UPDATE verification_cases 
-       SET overall_status = 'APPROVED', officer_remarks = ?, assigned_officer_id = ?, reviewed_at = ?, updated_at = ?
-       WHERE id = ?`,
-      [remarks || 'Technical & Statutory Compliance Verified by CPCL Officer', req.user.id, now, now, verificationCase.id]
-    );
+    await BidApplication.updateOne({ id: verificationCase.application_id }, { $set: { status: 'QUALIFIED' } });
 
-    db.execute(
-      "UPDATE bid_applications SET status = 'QUALIFIED' WHERE id = ?",
-      [verificationCase.application_id]
-    );
-  });
+    await logAuditAction({
+      userId: req.user.id, userName: req.user.full_name || req.user.name, userRole: req.user.role,
+      action: 'VERIFICATION_APPROVED', entityType: 'VERIFICATION_CASE', entityId: verificationCase.id,
+      previousState: prevStatus, newState: 'APPROVED',
+      details: { remarks, applicationId: verificationCase.application_id }
+    });
 
-  logAuditAction({
-    userId: req.user.id,
-    userName: req.user.full_name,
-    userRole: req.user.role,
-    action: 'VERIFICATION_APPROVED',
-    entityType: 'VERIFICATION_CASE',
-    entityId: verificationCase.id,
-    previousState: verificationCase.overall_status,
-    newState: 'APPROVED',
-    details: { remarks, applicationId: verificationCase.application_id }
-  });
+    await createNotification({
+      userId: verificationCase.bidder_id, role: 'BIDDER', type: 'VERIFICATION',
+      title: 'Bid Verification Approved',
+      message: 'Your bid application has been successfully verified and qualified by the CPCL Procurement Committee.',
+      relatedEntity: 'BID_APPLICATION', relatedId: verificationCase.application_id
+    });
 
-  createNotification({
-    userId: verificationCase.bidder_id,
-    role: 'BIDDER',
-    type: 'VERIFICATION',
-    title: 'Bid Verification Approved',
-    message: 'Your bid application has been successfully verified and qualified by the CPCL Procurement Committee.',
-    relatedEntity: 'BID_APPLICATION',
-    relatedId: verificationCase.application_id
-  });
-
-  return res.json({ message: 'Verification case approved and bidder marked as QUALIFIED', status: 'APPROVED' });
+    return res.json({ message: 'Verification case approved and bidder marked as QUALIFIED', status: 'APPROVED' });
+  } catch (err) {
+    console.error('[Verification POST /cases/:id/approve]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // POST /api/verification/cases/:id/reject
-router.post('/cases/:id/reject', verifyToken, requireRole(['OFFICER', 'ADMIN']), (req, res) => {
-  const { reason, remarks } = req.body;
-  if (!reason) {
-    return res.status(400).json({ error: 'Rejection reason is mandatory for formal record' });
+router.post('/cases/:id/reject', verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
+  try {
+    const { reason, remarks } = req.body;
+    if (!reason) return res.status(400).json({ error: 'Rejection reason is mandatory for formal record' });
+
+    const verificationCase = await VerificationCase.findOne({ id: req.params.id });
+    if (!verificationCase) return res.status(404).json({ error: 'Verification case not found' });
+
+    const prevStatus = verificationCase.overall_status;
+    verificationCase.overall_status = 'REJECTED';
+    verificationCase.rejection_reason = reason;
+    verificationCase.officer_remarks = remarks || '';
+    verificationCase.assigned_officer_id = req.user.id;
+    verificationCase.reviewed_at = new Date();
+    await verificationCase.save();
+
+    await BidApplication.updateOne({ id: verificationCase.application_id }, { $set: { status: 'REJECTED' } });
+
+    await logAuditAction({
+      userId: req.user.id, userName: req.user.full_name || req.user.name, userRole: req.user.role,
+      action: 'VERIFICATION_REJECTED', entityType: 'VERIFICATION_CASE', entityId: verificationCase.id,
+      previousState: prevStatus, newState: 'REJECTED', details: { reason, remarks }
+    });
+
+    await createNotification({
+      userId: verificationCase.bidder_id, role: 'BIDDER', type: 'VERIFICATION',
+      title: 'Bid Verification Determination: Non-Compliant',
+      message: `Your bid application was determined non-compliant. Reason: ${reason}`,
+      relatedEntity: 'BID_APPLICATION', relatedId: verificationCase.application_id
+    });
+
+    return res.json({ message: 'Verification case rejected with formal audit log recorded', status: 'REJECTED' });
+  } catch (err) {
+    console.error('[Verification POST /cases/:id/reject]', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  const verificationCase = db.queryOne('SELECT * FROM verification_cases WHERE id = ?', [req.params.id]);
-  if (!verificationCase) return res.status(404).json({ error: 'Verification case not found' });
-
-  const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
-
-  db.transaction(() => {
-    db.execute(
-      `UPDATE verification_cases 
-       SET overall_status = 'REJECTED', rejection_reason = ?, officer_remarks = ?, assigned_officer_id = ?, reviewed_at = ?, updated_at = ?
-       WHERE id = ?`,
-      [reason, remarks || '', req.user.id, now, now, verificationCase.id]
-    );
-
-    db.execute(
-      "UPDATE bid_applications SET status = 'REJECTED' WHERE id = ?",
-      [verificationCase.application_id]
-    );
-  });
-
-  logAuditAction({
-    userId: req.user.id,
-    userName: req.user.full_name,
-    userRole: req.user.role,
-    action: 'VERIFICATION_REJECTED',
-    entityType: 'VERIFICATION_CASE',
-    entityId: verificationCase.id,
-    previousState: verificationCase.overall_status,
-    newState: 'REJECTED',
-    details: { reason, remarks }
-  });
-
-  createNotification({
-    userId: verificationCase.bidder_id,
-    role: 'BIDDER',
-    type: 'VERIFICATION',
-    title: 'Bid Verification Determination: Non-Compliant',
-    message: `Your bid application was determined non-compliant. Reason: ${reason}`,
-    relatedEntity: 'BID_APPLICATION',
-    relatedId: verificationCase.application_id
-  });
-
-  return res.json({ message: 'Verification case rejected with formal audit log recorded', status: 'REJECTED' });
 });
 
 // POST /api/verification/cases/:id/escalate
-router.post('/cases/:id/escalate', verifyToken, requireRole(['OFFICER', 'ADMIN']), (req, res) => {
-  const { remarks } = req.body;
-  const verificationCase = db.queryOne('SELECT * FROM verification_cases WHERE id = ?', [req.params.id]);
-  if (!verificationCase) return res.status(404).json({ error: 'Verification case not found' });
+router.post('/cases/:id/escalate', verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
+  try {
+    const { remarks } = req.body;
+    const verificationCase = await VerificationCase.findOne({ id: req.params.id });
+    if (!verificationCase) return res.status(404).json({ error: 'Verification case not found' });
 
-  db.execute(
-    "UPDATE verification_cases SET overall_status = 'ESCALATED', officer_remarks = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    [remarks || 'Escalated to Chief Vigilance Officer for scrutiny', verificationCase.id]
-  );
+    const prevStatus = verificationCase.overall_status;
+    verificationCase.overall_status = 'ESCALATED';
+    verificationCase.officer_remarks = remarks || 'Escalated to Chief Vigilance Officer for scrutiny';
+    await verificationCase.save();
 
-  logAuditAction({
-    userId: req.user.id,
-    userName: req.user.full_name,
-    userRole: req.user.role,
-    action: 'CASE_ESCALATED_CVO',
-    entityType: 'VERIFICATION_CASE',
-    entityId: verificationCase.id,
-    previousState: verificationCase.overall_status,
-    newState: 'ESCALATED',
-    details: { remarks }
-  });
+    await logAuditAction({
+      userId: req.user.id, userName: req.user.full_name || req.user.name, userRole: req.user.role,
+      action: 'CASE_ESCALATED_CVO', entityType: 'VERIFICATION_CASE', entityId: verificationCase.id,
+      previousState: prevStatus, newState: 'ESCALATED', details: { remarks }
+    });
 
-  notifyRole({
-    role: 'ADMIN',
-    type: 'RISK_ALERT',
-    title: 'High-Risk Procurement Case Escalated to CVO',
-    message: `Case ${verificationCase.id} has been escalated for scrutiny. Remarks: ${remarks || 'Critical anomaly detected.'}`,
-    relatedEntity: 'VERIFICATION_CASE',
-    relatedId: verificationCase.id
-  });
+    await notifyRole({
+      role: 'ADMIN', type: 'RISK_ALERT', title: 'High-Risk Procurement Case Escalated to CVO',
+      message: `Case ${verificationCase.id} has been escalated for scrutiny. Remarks: ${remarks || 'Critical anomaly detected.'}`,
+      relatedEntity: 'VERIFICATION_CASE', relatedId: verificationCase.id
+    });
 
-  return res.json({ message: 'Case escalated to Chief Vigilance Officer', status: 'ESCALATED' });
+    return res.json({ message: 'Case escalated to Chief Vigilance Officer', status: 'ESCALATED' });
+  } catch (err) {
+    console.error('[Verification POST /cases/:id/escalate]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // PUT /api/verification/cases/:id/update-field
-router.put('/cases/:id/update-field', verifyToken, requireRole(['OFFICER', 'ADMIN']), (req, res) => {
-  const { checkId, newResult, evidence } = req.body;
-  if (!checkId || !newResult) {
-    return res.status(400).json({ error: 'Check ID and new result are required' });
+router.put('/cases/:id/update-field', verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
+  try {
+    const { checkId, newResult, evidence } = req.body;
+    if (!checkId || !newResult) return res.status(400).json({ error: 'Check ID and new result are required' });
+
+    const verificationCase = await VerificationCase.findOne({ id: req.params.id });
+    if (!verificationCase) return res.status(404).json({ error: 'Verification case not found' });
+
+    const checkIndex = (verificationCase.checks || []).findIndex(c => c.id === checkId);
+    if (checkIndex === -1) return res.status(404).json({ error: 'Compliance check rule not found' });
+
+    const prevResult = verificationCase.checks[checkIndex].result;
+    verificationCase.checks[checkIndex].result = newResult;
+    verificationCase.checks[checkIndex].evidence = evidence || verificationCase.checks[checkIndex].evidence;
+    verificationCase.checks[checkIndex].review_status = 'MANUAL_OFFICER_OVERRIDE';
+    await verificationCase.save();
+
+    await logAuditAction({
+      userId: req.user.id, userName: req.user.full_name || req.user.name, userRole: req.user.role,
+      action: 'OFFICER_OVERRIDE_COMPLIANCE_RULE', entityType: 'COMPLIANCE_CHECK', entityId: checkId,
+      previousState: prevResult, newState: newResult,
+      details: { requirement: verificationCase.checks[checkIndex].requirement_name, evidence }
+    });
+
+    return res.json({ message: 'Compliance check updated with manual officer override', checkId, newResult });
+  } catch (err) {
+    console.error('[Verification PUT /cases/:id/update-field]', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  const check = db.queryOne('SELECT * FROM compliance_checks WHERE id = ?', [checkId]);
-  if (!check) return res.status(404).json({ error: 'Compliance check rule not found' });
-
-  db.execute(
-    `UPDATE compliance_checks 
-     SET result = ?, evidence = ?, review_status = 'MANUAL_OFFICER_OVERRIDE'
-     WHERE id = ?`,
-    [newResult, evidence || check.evidence, checkId]
-  );
-
-  logAuditAction({
-    userId: req.user.id,
-    userName: req.user.full_name,
-    userRole: req.user.role,
-    action: 'OFFICER_OVERRIDE_COMPLIANCE_RULE',
-    entityType: 'COMPLIANCE_CHECK',
-    entityId: checkId,
-    previousState: check.result,
-    newState: newResult,
-    details: { requirement: check.requirement_name, evidence }
-  });
-
-  return res.json({ message: 'Compliance check updated with manual officer override', checkId, newResult });
 });
 
 export default router;
