@@ -16,11 +16,14 @@ import joblib
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
+AI_ENGINE_ROOT = Path(__file__).resolve().parent
+
 TENDER_MODEL_PATH = (
-    PROJECT_ROOT / "models/tender_type_classifier/tfidf_linear_svm_baseline.joblib"
+    AI_ENGINE_ROOT / "models/tender_type_classifier/tfidf_linear_svm_baseline.joblib"
 )
+
 DOCUMENT_MODEL_PATH = (
-    PROJECT_ROOT / "models/document_extractor/layoutlmv3_funsd_plus_v1"
+    AI_ENGINE_ROOT / "models/document_extractor/layoutlmv3_funsd_plus_v1"
 )
 
 @lru_cache(maxsize=1)
