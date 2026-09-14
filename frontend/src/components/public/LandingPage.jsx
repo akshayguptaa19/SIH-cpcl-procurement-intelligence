@@ -10,57 +10,9 @@ import {
   Flame, KeyRound, Radio, Compass, Play, CheckCheck, Fingerprint, Copy,
   FileSignature, CheckSquare, ArrowLeftRight, ChevronLeft
 } from 'lucide-react';
+import { api } from '../../lib/api.js';
 
-// ─── CPCL CIRCULAR EMBLEM SVG ──────────────────────────────────────────
-export function CpclEmblem({ size = 42, className = "" }) {
-  return (
-    <svg 
-      width={size} 
-      height={size} 
-      viewBox="0 0 100 100" 
-      fill="none" 
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-label="CPCL Emblem"
-    >
-      <circle cx="50" cy="50" r="48" fill="#0A1628" stroke="#38BDF8" strokeWidth="2.5" />
-      {/* Top half red */}
-      <path d="M 10 50 A 40 40 0 0 1 90 50 Z" fill="#DC2626" />
-      {/* Bottom half blue */}
-      <path d="M 10 50 A 40 40 0 0 0 90 50 Z" fill="#1D4ED8" />
-      {/* Center White Ribbon */}
-      <rect x="14" y="38" width="72" height="24" rx="4" fill="#FFFFFF" stroke="#0F172A" strokeWidth="1" />
-      {/* CPCL Letters */}
-      <text 
-        x="50" 
-        y="55" 
-        fontFamily="sans-serif" 
-        fontSize="17" 
-        fontWeight="900" 
-        fill="#0F172A" 
-        textAnchor="middle" 
-        letterSpacing="1.5"
-      >
-        CPCL
-      </text>
-      {/* Flame accent */}
-      <path d="M 50 18 Q 54 26 50 32 Q 46 26 50 18 Z" fill="#FBBF24" />
-      {/* Wave in blue half */}
-      <path d="M 28 72 Q 50 66 72 72" stroke="#60A5FA" strokeWidth="2" fill="none" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-// ─── ASHOKA PILLAR / GOV OF INDIA EMBLEM SVG ───────────────────────────
-function IndiaGovEmblem({ size = 15 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className="text-slate-400">
-      <path d="M12 2L4 5V11C4 16.55 7.42 21.74 12 23C16.58 21.74 20 16.55 20 11V5L12 2ZM12 4.18L18 6.43V11C18 15.22 15.45 19.14 12 20.24C8.55 19.14 6 15.22 6 11V6.43L12 4.18ZM11 7V9H13V7H11ZM11 11V17H13V11H11Z" />
-    </svg>
-  );
-}
-
-export default function LandingPage() {
+export default function LandingPage({ onNavigateAuth, onSelectTender }) {
   const navigate = useNavigate();
 
   // Search & Filter State
@@ -76,40 +28,11 @@ export default function LandingPage() {
   const [howItWorksModalOpen, setHowItWorksModalOpen] = useState(false);
   const [selectedTenderModal, setSelectedTenderModal] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [copiedHash, setCopiedHash] = useState(false);
-  const [copiedTenderId, setCopiedTenderId] = useState(null);
-  const [activeEvidenceTab, setActiveEvidenceTab] = useState('udin');
-  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [showWhyAnomaly, setShowWhyAnomaly] = useState(true);
+  const [activeWorkflowStage, setActiveWorkflowStage] = useState(3); // Default to OCR + AI
+  const [openFaq, setOpenFaq] = useState(0);
 
-  // Monitor scroll for back to top button
-  useEffect(() => {
-    const handleScroll = () => {
-      setShowBackToTop(window.scrollY > 350);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Keyboard accessibility: Escape to close modals, / to search
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        setEvidenceModalOpen(false);
-        setHowItWorksModalOpen(false);
-        setSelectedTenderModal(null);
-      }
-      if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
-        e.preventDefault();
-        const el = document.getElementById('tender-search-input');
-        el?.focus();
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Exact 3 Tenders from Reference Image
+  // Default seed tenders
   const defaultTenders = [
     {
       id: 't-128',
@@ -150,938 +73,1344 @@ export default function LandingPage() {
       ]
     },
     {
-      id: 't-valve-001',
-      reference_number: 'CPCL/VALVE/2025/001',
-      title: 'Supply of High-Pressure Industrial Valves',
-      category: 'Industrial Goods',
-      estimated_value_display: '₹18.50 Cr',
-      estimated_value: 185000000,
-      deadline: '15 Oct 2026',
-      badge: 'OPEN',
-      badgeColor: 'blue',
-      code: '03',
-      description: 'Procurement of high-pressure forged steel gate, globe, and check valves conforming to API 600 / API 602 standards for refinery offsite piping.',
-      eligibility: [
-        'Approved IBR (Indian Boiler Regulations) & PESO Certified Manufacturer',
-        'Min 3-Year Avg Turnover: ₹5.00 Cr certified with valid CA UDIN',
-        'NABL Accredited Test Laboratory Chemical & Hydrostatic Test Reports',
-        'Direct Calibration & Testing Facility located in India'
+      id: 't-164',
+      reference_number: 'CPCL/PROC/2026/164',
+      title: 'Distributed Control System (DCS) Cyber Security & SCADA Upgrade',
+      department: 'Instrumentation & Process Automation',
+      estimated_value: 115000000,
+      submission_deadline: '05 Oct 2026',
+      status: 'ACTIVE',
+      category: 'IT & Automation',
+      description: 'Implementation of air-gapped industrial firewall routers, IEC 62443 cyber architecture and redundancy controllers for refinery DCS.',
+      eligibility: ['CERT-In Empaneled Security Architecture', 'Min 3-Year Avg Turnover: ₹20 Cr', 'NABL Accredited Test Lab Reports', 'OEM Certified System Engineers']
+    }
+  ];
+
+  useEffect(() => {
+    async function loadPublicTenders() {
+      try {
+        const data = await api.tenders.getAll({ status: 'ACTIVE' });
+        if (data && data.length > 0) {
+          setTenders(data);
+        } else {
+          setTenders(defaultTenders);
+        }
+      } catch (err) {
+        setTenders(defaultTenders);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadPublicTenders();
+  }, []);
+
+  const handleAuthNavigate = (target) => {
+    if (onNavigateAuth) onNavigateAuth(target);
+    if (target === 'officer-login') navigate('/officer/login');
+    else if (target === 'officer-register') navigate('/officer/register');
+    else if (target === 'bidder-login') navigate('/bidder/login');
+    else if (target === 'bidder-register') navigate('/bidder/register');
+    else navigate(`/${target}`);
+  };
+
+  const scrollToSection = (id) => {
+    setMobileMenuOpen(false);
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const activeTendersList = tenders.length > 0 ? tenders : defaultTenders;
+  const filteredTenders = activeTendersList.filter(t => {
+    const matchesSearch = !searchTerm || 
+      t.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.reference_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.department?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCat = selectedCategory === 'ALL' || t.category === selectedCategory;
+    return matchesSearch && matchesCat;
+  });
+
+  // Interactive 8-Stage Workflow Data
+  const workflowStages = [
+    { 
+      step: '01', 
+      title: 'Tender Spec', 
+      badge: 'Specification',
+      color: 'from-blue-500 to-cyan-400',
+      glow: 'shadow-blue-500/20 border-blue-500/40 text-blue-400',
+      desc: 'CPCL Procurement Officers define technical eligibility criteria, mandatory statutory filings, and average turnover thresholds.',
+      inputs: ['GFR 2017 Tender Notice', 'Mandatory Document List', 'Financial Turnover Criteria'],
+      output: 'Cryptographically published tender specification on CPCL Sovereign Portal.'
+    },
+    { 
+      step: '02', 
+      title: 'Bid Submission', 
+      badge: 'Vendor Proposal',
+      color: 'from-cyan-500 to-teal-400',
+      glow: 'shadow-cyan-500/20 border-cyan-500/40 text-cyan-400',
+      desc: 'Registered vendors submit technical bids, GST certificates, CA audited statements, and past PSU experience documents.',
+      inputs: ['Form REG-06 (GST)', 'CA UDIN Certificate', 'Experience Completion Letters'],
+      output: 'Tamper-evident submission container with digital timestamp.'
+    },
+    { 
+      step: '03', 
+      title: 'SHA-256 Seal', 
+      badge: 'Integrity Seal',
+      color: 'from-teal-500 to-emerald-400',
+      glow: 'shadow-emerald-500/20 border-emerald-500/40 text-emerald-400',
+      desc: 'Every uploaded PDF is digested into a SHA-256 cryptographic hash to guarantee zero post-submission tampering.',
+      inputs: ['Raw Multi-page PDFs', 'ICAI UDIN Digit Signatures'],
+      output: 'Permanent immutable hash recorded in Sovereign Audit Ledger.'
+    },
+    { 
+      step: '04', 
+      title: 'OCR & AI Engine', 
+      badge: 'Entity Extraction',
+      color: 'from-purple-500 to-indigo-400',
+      glow: 'shadow-purple-500/20 border-purple-500/40 text-purple-400',
+      desc: 'High-speed OCR parses scanned documents in under 1.4s, extracting GSTIN, PAN, FY turnover, and client work credentials.',
+      inputs: ['Scanned Document OCR', 'Vision LLM Table Parser', 'Bounding Box Coordinate Mapping'],
+      output: 'Normalized JSON schema with exact page & bounding box citations.'
+    },
+    { 
+      step: '05', 
+      title: 'Deterministic Rules', 
+      badge: 'GFR Compliance',
+      color: 'from-indigo-500 to-blue-400',
+      glow: 'shadow-indigo-500/20 border-indigo-500/40 text-indigo-400',
+      desc: 'Algorithmic checks evaluate mathematical criteria: 3-year turnover thresholds, MSME exemption rules, and GST validity.',
+      inputs: ['Turnover Math Check', 'Entity Active Status', 'Class-1 Local Content Verification'],
+      output: 'Rule compliance matrix (PASS / FAIL / REVIEW_REQUIRED).'
+    },
+    { 
+      step: '06', 
+      title: 'Anomaly Scrutiny', 
+      badge: 'Risk Detection',
+      color: 'from-amber-500 to-orange-400',
+      glow: 'shadow-amber-500/20 border-amber-500/40 text-amber-400',
+      desc: 'Cross-document intelligence identifies suspicious YoY revenue surges (+130%), conflicting PAN entity types, or fake UDINs.',
+      inputs: ['YoY Variance Model', 'Cross-Doc Entity Consistency', 'ICAI UDIN Registry Ping'],
+      output: 'Explainable anomaly flags with exact mathematical rationales.'
+    },
+    { 
+      step: '07', 
+      title: 'Officer Review', 
+      badge: 'Human Authority',
+      color: 'from-sky-500 to-blue-500',
+      glow: 'shadow-sky-500/20 border-sky-500/40 text-sky-400',
+      desc: 'CPCL Procurement Officers inspect highlighted document citations side-by-side with full authority to accept or flag.',
+      inputs: ['Side-by-Side PDF Viewer', 'One-Click Citation Jumps', 'Officer Review Notes'],
+      output: 'Official technical qualification recommendation by authorized officer.'
+    },
+    { 
+      step: '08', 
+      title: 'Sovereign Award', 
+      badge: 'Audit Ready',
+      color: 'from-emerald-500 to-green-400',
+      glow: 'shadow-emerald-500/20 border-emerald-500/40 text-emerald-400',
+      desc: 'Legally defensible procurement determination logged with time, officer signature, and complete CVC/CAG exportable audit trail.',
+      inputs: ['Officer Digital Clearance', 'CVC Integrity Certificate'],
+      output: 'Immutable contract award readiness with zero vigilance vulnerability.'
+    }
+  ];
+
+  // Document Intelligence Interactive Data
+  const documentIntelligenceData = {
+    gst: {
+      name: 'GST Certificate (Form REG-06)',
+      issuer: 'Goods and Services Tax Network (GSTN)',
+      docSnippet: `GOVERNMENT OF INDIA · FORM GST REG-06
+REGISTRATION CERTIFICATE
+
+Registration Number: 33AAACS1429B1Z8
+Legal Name: SHAKTI ENGINEERING & INFRASTRUCTURE LTD
+Trade Name: SHAKTI ENGINEERING
+Constitution of Business: Public Limited Company
+Date of Liability: 01/07/2017
+Period of Validity: From 14/06/2017 to Continuing
+Type of Registration: Regular / Active Taxpayer
+Jurisdiction: Chennai Large Taxpayer Unit (LTU-02)`,
+      boundingHighlight: 'Registration Number: 33AAACS1429B1Z8',
+      confidence: '99.4%',
+      extracted: [
+        { label: 'Company Name', value: 'Shakti Engineering & Infrastructure Ltd' },
+        { label: 'GSTIN', value: '33AAACS1429B1Z8', status: 'verified' },
+        { label: 'State Code', value: '33 (Tamil Nadu)', status: 'verified' },
+        { label: 'Embedded PAN', value: 'AAACS1429B', status: 'verified' },
+        { label: 'Taxpayer Status', value: 'Regular / Active', status: 'verified' }
+      ],
+      compliance: [
+        { label: 'GSTIN Checksum & Format Validation', pass: true, rule: 'RULE-GST-01' },
+        { label: 'Embedded PAN Matches Form 49A PAN Card', pass: true, rule: 'RULE-PAN-02' },
+        { label: 'Active Return Filing Status (GSTR-3B Current)', pass: true, rule: 'RULE-GST-03' }
+      ]
+    },
+    pan: {
+      name: 'Permanent Account Number (PAN Card)',
+      issuer: 'Income Tax Department, Government of India',
+      docSnippet: `INCOME TAX DEPARTMENT · GOVT OF INDIA
+PERMANENT ACCOUNT NUMBER CARD
+
+Number: AAACS1429B
+Name: SHAKTI ENGINEERING & INFRASTRUCTURE LTD
+Entity Category: Domestic Company (Public Ltd)
+Date of Incorporation: 11/04/2012
+Status: Active and In-Good-Standing with NSDL`,
+      boundingHighlight: 'Number: AAACS1429B',
+      confidence: '99.8%',
+      extracted: [
+        { label: 'Entity Name', value: 'SHAKTI ENGINEERING & INFRASTRUCTURE LTD' },
+        { label: 'PAN Number', value: 'AAACS1429B', status: 'verified' },
+        { label: 'Entity 4th Character', value: "'C' (Company - Verified)", status: 'verified' },
+        { label: 'NSDL Central Registry Match', value: '100% Exact Match', status: 'verified' }
+      ],
+      compliance: [
+        { label: 'NSDL Central Database Authentication', pass: true, rule: 'RULE-PAN-01' },
+        { label: 'Corporate Legal Identity Status Valid', pass: true, rule: 'RULE-PAN-03' },
+        { label: 'No Active Disqualification Flags in MCA-21', pass: true, rule: 'RULE-MCA-05' }
+      ]
+    },
+    turnover: {
+      name: 'Audited Financials & CA Certificate',
+      issuer: 'Institute of Chartered Accountants of India (ICAI)',
+      docSnippet: `INDEPENDENT AUDITOR’S CERTIFICATE ON ANNUAL TURNOVER
+Client: Shakti Engineering & Infrastructure Ltd
+CA UDIN: 24089123AAAAAA1029
+
+Financial Year 2023–24: ₹18.40 Cr
+Financial Year 2024–25: ₹21.10 Cr
+Financial Year 2025–26: ₹48.60 Cr [PROVISIONAL AUDITED]
+3-Year Average Turnover: ₹29.36 Cr
+Operating Profit Margin: 14.8%`,
+      boundingHighlight: 'Financial Year 2025–26: ₹48.60 Cr',
+      confidence: '94.6%',
+      extracted: [
+        { label: 'FY 2025–26 Reported', value: '₹48.60 Cr (+130.3% YoY)' },
+        { label: 'FY 2024–25 Baseline', value: '₹21.10 Cr' },
+        { label: '3-Year Average', value: '₹29.36 Cr (Req: ₹25.0 Cr)', status: 'verified' },
+        { label: 'CA UDIN Number', value: '24089123AAAAAA1029', status: 'verified' }
+      ],
+      compliance: [
+        { label: 'Mandatory Minimum Turnover Met (>₹25 Cr)', pass: true, rule: 'RULE-FIN-001' },
+        { label: 'CA UDIN Authenticated with ICAI Portal', pass: true, rule: 'RULE-FIN-002' },
+        { label: 'YoY Variance Under 50% Threshold', pass: false, rule: 'RULE-FIN-004', alert: 'Review Required (+130.3% surge)' }
+      ]
+    },
+    experience: {
+      name: 'Past Work Experience Certificate',
+      issuer: 'Bharat Petroleum Corporation Limited (BPCL)',
+      docSnippet: `CLIENT WORK COMPLETION & PERFORMANCE CERTIFICATE
+Client: Bharat Petroleum Corporation Limited (BPCL Kochi Refinery)
+Contractor: Shakti Engineering & Infrastructure Ltd
+Contract Reference: BPCL/KR/MECH/2023/882
+Work Scope: Overhaul & Hydrostatic Certification of High-Pressure Crude Valves
+Contract Value: ₹14.20 Cr
+Completion Date: 15/01/2025 · Execution Rating: Satisfactory`,
+      boundingHighlight: 'Contract Value: ₹14.20 Cr',
+      confidence: '98.2%',
+      extracted: [
+        { label: 'Client Organization', value: 'BPCL (Kochi Refinery)' },
+        { label: 'Contract Value', value: '₹14.20 Cr' },
+        { label: 'Scope Similarity', value: 'API 6D Valve Overhaul (>85% Match)', status: 'verified' },
+        { label: 'Completion Date', value: '15 January 2025', status: 'verified' }
+      ],
+      compliance: [
+        { label: 'Qualifying PSU / Refinery Execution Scope', pass: true, rule: 'RULE-EXP-01' },
+        { label: 'Single Order Value > 50% of Tender Est', pass: true, rule: 'RULE-EXP-02' },
+        { label: 'Satisfactory Performance Rating from PSU Client', pass: true, rule: 'RULE-EXP-03' }
       ]
     }
-  ];
-
-  // 7 Workflow Steps Data matching reference image
-  const workflowSteps = [
-    {
-      num: '01',
-      title: 'Tender',
-      icon: FileText,
-      color: 'blue',
-      desc: 'Create and publish tender with eligibility requirements',
-      officerDuty: 'Defines commercial specifications, turnover cut-offs, and GFR 2017 eligibility gates.',
-      aiDuty: 'Cross-verifies clause consistency against CVC guidelines and GFR Rule 144(xi).'
-    },
-    {
-      num: '02',
-      title: 'Bid',
-      icon: Building2,
-      color: 'blue',
-      desc: 'Submit application with required documents',
-      officerDuty: 'Monitors aggregate incoming submission count while bids remain sealed and encrypted.',
-      aiDuty: 'Performs pre-flight file integrity, virus scanning, and PDF format validation.'
-    },
-    {
-      num: '03',
-      title: 'Documents',
-      icon: FileCode,
-      color: 'blue',
-      desc: 'Process with OCR and AI extraction',
-      officerDuty: 'Reviews highlighted bounding box source citations for extracted entity parameters.',
-      aiDuty: 'Extracts 500+ scanned pages in 1.4 seconds with 98.5% multi-modal accuracy.'
-    },
-    {
-      num: '04',
-      title: 'Compliance',
-      icon: Scale,
-      color: 'cyan',
-      desc: 'Evaluate with deterministic rules',
-      officerDuty: 'Inspects objective pass/fail scorecards mapped to CPCL tender conditions.',
-      aiDuty: 'Executes programmatic rule engines with zero hallucinations or probabilistic errors.'
-    },
-    {
-      num: '05',
-      title: 'Risk',
-      icon: AlertTriangle,
-      color: 'blue',
-      desc: 'Identify potential risk indicators',
-      officerDuty: 'Examines flagged turnover anomalies, shell entities, or sudden balance sheet spikes.',
-      aiDuty: 'Cross-checks live GSTIN active status, NSDL PAN, and ICAI UDIN registers.'
-    },
-    {
-      num: '06',
-      title: 'Officer Review',
-      icon: UserCheck,
-      color: 'cyan',
-      desc: 'Review evidence and verify findings',
-      officerDuty: 'Retains 100% statutory discretion to approve, seek clarifications, or disqualify.',
-      aiDuty: 'Compiles consolidated explainable scrutiny reports with exact PDF citations.'
-    },
-    {
-      num: '07',
-      title: 'Decision',
-      icon: CheckCircle2,
-      color: 'emerald',
-      desc: 'Make final decision with audit trail',
-      officerDuty: 'Signs off on technical evaluation and awards compliant commercial contracts.',
-      aiDuty: 'Permanently stamps cryptographic SHA-256 Merkle root certificates into audit ledger.'
-    }
-  ];
-
-  // Applications mock for Bidder widget
-  const bidderApplications = [
-    {
-      id: 'CPCL/PROC/2026/128',
-      title: 'Industrial Pipeline Equipment',
-      status: 'Under Review',
-      badgeClass: 'bg-rose-500/20 text-rose-400 border border-rose-500/30',
-      category: 'Under Review'
-    },
-    {
-      id: 'CPCL/PROC/2026/147',
-      title: 'Refinery Maintenance Services',
-      status: 'Submitted',
-      badgeClass: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
-      category: 'Active'
-    },
-    {
-      id: 'CPCL/PROC/2026/152',
-      title: 'Safety Equipment Supply',
-      status: 'Draft',
-      badgeClass: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
-      category: 'Active'
-    }
-  ];
-
-  const filteredBidderApps = bidderApplications.filter(app => {
-    if (bidderAppFilter === 'All') return true;
-    if (bidderAppFilter === 'Active') return app.category === 'Active';
-    if (bidderAppFilter === 'Under Review') return app.category === 'Under Review';
-    if (bidderAppFilter === 'Closed') return app.category === 'Closed';
-    return true;
-  });
-
-  // Chart data for Compliance bar chart
-  const complianceMonthlyData = [
-    { month: 'Jan', value: 35, verified: 18 },
-    { month: 'Feb', value: 45, verified: 24 },
-    { month: 'Mar', value: 60, verified: 36 },
-    { month: 'Apr', value: 50, verified: 28 },
-    { month: 'May', value: 75, verified: 45 },
-    { month: 'Jun', value: 65, verified: 38 },
-    { month: 'Jul', value: 80, verified: 48 },
-    { month: 'Aug', value: 70, verified: 42 },
-    { month: 'Sep', value: 95, verified: 58 },
-    { month: 'Oct', value: 85, verified: 51 }
-  ];
-
-  const filteredTenders = defaultTenders.filter(t => {
-    const matchesSearch = 
-      t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.reference_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.category.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'All Categories' || t.category === selectedCategory;
-    const matchesStatus = selectedStatus === 'All Status' || t.badge === selectedStatus;
-    return matchesSearch && matchesCategory && matchesStatus;
-  });
-
-  const handleCopyHash = () => {
-    navigator.clipboard?.writeText('7f8a9e21b4e7c3d5a6b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0');
-    setCopiedHash(true);
-    setTimeout(() => setCopiedHash(false), 2000);
   };
 
-  const handleCopyTenderId = (ref) => {
-    navigator.clipboard?.writeText(ref);
-    setCopiedTenderId(ref);
-    setTimeout(() => setCopiedTenderId(null), 2000);
-  };
+  const currentDoc = documentIntelligenceData[selectedDocTab];
+
+  // FAQ items
+  const faqs = [
+    {
+      q: 'Does BidVerify AI replace the Procurement Officer’s legal authority?',
+      a: 'Absolutely not. BidVerify AI is strictly an assistive intelligence copilot. Under GFR 2017 and CVC guidelines, all qualifying determinations, rejections, and contract awards require the explicit sign-off of authorized CPCL Procurement Officers. The platform accelerates document review from hours to seconds and surfaces flagged anomalies, but the human officer maintains 100% decisive authority.'
+    },
+    {
+      q: 'How does the platform prevent document fraud and tampering?',
+      a: 'Every document uploaded by a vendor is instantly digested into a cryptographic SHA-256 hash at the exact second of submission. This cryptographic fingerprint is stored in an immutable audit ledger. If even a single byte or pixel of a submitted PDF is altered post-submission, the checksum fails instantly.'
+    },
+    {
+      q: 'What is CA UDIN verification and how does it work?',
+      a: 'The Institute of Chartered Accountants of India (ICAI) mandates a Unique Document Identification Number (UDIN) on all audited turnover certificates. BidVerify AI automatically extracts the 18-digit UDIN, verifies its mathematical checksum, and validates it against ICAI public records to eliminate fake balance sheets.'
+    },
+    {
+      q: 'Is bidder proprietary data kept secure and confidential?',
+      a: 'Yes. BidVerify AI operates within an on-premise, air-gapped sovereign deployment topology. Bidder financial data, client references, and proprietary technical designs are never sent to public commercial LLM APIs and never used for external model training.'
+    },
+    {
+      q: 'Can MSME vendors claim exemptions through the portal?',
+      a: 'Yes. The system automatically reads Udyam Registration certificates and cross-checks MSME classifications (Micro, Small, Medium) to apply statutory exemptions such as EMD waivers and turnover relaxations in accordance with Government of India public procurement policies.'
+    }
+  ];
 
   return (
-    <div className="min-h-screen bg-[#030712] text-slate-100 font-['Inter',sans-serif] selection:bg-blue-600 selection:text-white relative overflow-x-hidden">
+    <div 
+      style={{ 
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        backgroundColor: '#030712',
+        color: '#F8FAFC'
+      }}
+      className="min-h-screen flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200 antialiased relative overflow-x-hidden"
+    >
+      
+      {/* ─── CYBER GRID BACKGROUND PATTERN ──────────────────────────────── */}
+      <div 
+        style={{
+          backgroundImage: `radial-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px), radial-gradient(rgba(168, 85, 247, 0.05) 1px, transparent 1px)`,
+          backgroundSize: '36px 36px',
+          backgroundPosition: '0 0, 18px 18px'
+        }}
+        className="fixed inset-0 pointer-events-none z-0 opacity-80"
+      />
 
-      {/* ─── 1. TOP GOVERNMENT BAR ────────────────────────────────────────── */}
-      <div className="bg-[#02050E] text-slate-400 text-[11px] py-2 px-6 sm:px-8 border-b border-slate-900/90 select-none">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          
-          {/* Left Gov branding */}
-          <div className="flex items-center gap-2.5">
-            <IndiaGovEmblem size={15} />
-            <span className="text-slate-200 font-medium tracking-tight">Government of India</span>
+      {/* ─── LUMINOUS MULTI-COLOR AMBIENT AURORA GLOWS ─────────────────── */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[580px] bg-[radial-gradient(ellipse_at_center,rgba(99,102,241,0.28)_0%,rgba(56,189,248,0.18)_35%,rgba(168,85,247,0.12)_60%,transparent_75%)] pointer-events-none blur-3xl -z-10" />
+      <div className="absolute top-[750px] right-[-100px] w-[650px] h-[650px] bg-[radial-gradient(circle,rgba(6,182,212,0.15)_0%,transparent_70%)] pointer-events-none blur-3xl -z-10" />
+      <div className="absolute top-[1600px] left-[-100px] w-[700px] h-[700px] bg-[radial-gradient(circle,rgba(168,85,247,0.14)_0%,transparent_70%)] pointer-events-none blur-3xl -z-10" />
+      <div className="absolute top-[2600px] right-[10%] w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(16,185,129,0.12)_0%,transparent_70%)] pointer-events-none blur-3xl -z-10" />
+
+      {/* ─── LEVEL 1: OFFICIAL GOVERNMENT AUTHORITY BAR (FUTURISTIC DARK) ─ */}
+      <div className="bg-[#02050E]/90 border-b border-white/[0.07] px-4 sm:px-8 py-2 text-xs relative z-30 backdrop-blur-md">
+        <div className="max-w-[1360px] mx-auto flex flex-wrap items-center justify-between gap-3 text-slate-400">
+          <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs">
+            <span className="font-bold text-slate-200 flex items-center gap-2">
+              <span className="flex h-2.5 w-2.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-gradient-to-r from-orange-500 via-white to-green-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]"></span>
+              </span>
+              Government of India
+            </span>
             <span className="text-slate-600">|</span>
-            <span className="text-slate-400">Ministry of Petroleum & Natural Gas</span>
+            <span className="text-slate-300 font-medium">
+              Ministry of Petroleum & Natural Gas
+            </span>
           </div>
 
-          {/* Center CPCL Title */}
-          <div className="hidden md:block text-slate-300 font-medium tracking-tight">
-            Chennai Petroleum Corporation Limited (CPCL)
+          <div className="hidden md:flex items-center gap-2 text-slate-300 font-semibold text-xs">
+            <Building2 className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Chennai Petroleum Corporation Limited (CPCL)</span>
           </div>
 
-          {/* Right Security Status */}
-          <div className="flex items-center gap-4 text-[11px]">
-            <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50" />
-              <span>Secure Procurement Environment</span>
-            </div>
-            <div className="hidden sm:flex items-center gap-1 text-slate-400">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>SHA-256 Secured</span>
-            </div>
+          <div className="flex items-center gap-2 text-xs ml-auto md:ml-0">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.9)]"></span>
+            <span className="font-mono text-[11px] text-emerald-400 font-bold tracking-wider uppercase">
+              Air-Gapped Sovereign Node Active
+            </span>
           </div>
-
         </div>
       </div>
 
-      {/* ─── 2. MAIN NAVBAR ──────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 bg-[#050B17]/95 backdrop-blur-md border-b border-slate-800/80 transition-all shadow-md shadow-black/20">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 h-20 flex items-center justify-between">
+      {/* ─── LEVEL 2: REFINED MAIN NAVIGATION (FLOATING CYBER GLASS) ───── */}
+      <header className="sticky top-3 z-40 px-4 sm:px-8 transition-all">
+        <div className="max-w-[1360px] mx-auto bg-slate-950/80 backdrop-blur-2xl border border-white/[0.12] rounded-2xl px-5 py-3 flex items-center justify-between gap-6 shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
           
-          {/* Brand Logo */}
+          {/* CPCL Branding matching AuthPage logo */}
           <div 
-            onClick={() => {
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="flex items-center gap-3.5 cursor-pointer group select-none"
+            className="flex items-center gap-3 cursor-pointer select-none group"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
-            <CpclEmblem size={44} className="group-hover:scale-105 transition-transform shrink-0 drop-shadow-md" />
-            <div className="flex flex-col">
-              <div className="flex items-center gap-1.5 leading-none">
-                <span className="text-lg font-black text-white tracking-wider">CPCL</span>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-400 flex items-center justify-center font-black text-white text-lg shadow-[0_0_20px_rgba(56,189,248,0.5)] group-hover:scale-105 transition-all">
+              ⚡
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-base font-extrabold text-white tracking-tight leading-tight">
+                  BidVerify
+                </span>
+                <span className="text-[10px] font-black text-cyan-300 bg-cyan-950/80 border border-cyan-400/40 px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.3)]">
+                  AI SOVEREIGN
+                </span>
               </div>
-              <span className="text-[11px] text-slate-400 leading-tight mt-0.5 font-medium">
-                Chennai Petroleum Corporation Limited
-              </span>
-              <span className="text-[10px] text-sky-400 font-semibold tracking-tight uppercase">
-                Sovereign Procurement
-              </span>
+              <p className="text-[11px] text-slate-400 font-medium hidden sm:block">
+                CPCL · Ministry of Petroleum & Natural Gas
+              </p>
             </div>
           </div>
 
-          {/* Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-8 text-xs font-semibold text-slate-300">
-            <a href="#overview" className="text-white font-bold transition-colors hover:text-sky-400">Home</a>
-            <a href="#workflow" className="hover:text-white transition-colors">How It Works</a>
-            <a href="#tenders" className="hover:text-white transition-colors">Procurement</a>
-            <a href="#challenge" className="hover:text-white transition-colors">About</a>
-            <a href="#faq" className="hover:text-white transition-colors">Help</a>
+          {/* Desktop Navigation Links */}
+          <nav 
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            className="hidden lg:flex bg-slate-900/80 p-1.5 rounded-xl border border-white/[0.08] text-xs font-semibold text-slate-300"
+          >
+            {[
+              { id: 'hero', label: 'Overview' },
+              { id: 'problem', label: 'Why AI' },
+              { id: 'how-it-works', label: '8-Stage Workflow' },
+              { id: 'document-intelligence', label: 'Document Intelligence' },
+              { id: 'tenders', label: 'Live Tenders' },
+              { id: 'faq', label: 'FAQ' },
+            ].map(link => (
+              <button 
+                key={link.id}
+                onClick={() => scrollToSection(link.id)} 
+                style={{ padding: '7px 14px', borderRadius: '8px', cursor: 'pointer' }}
+                className="hover:text-cyan-300 hover:bg-white/[0.08] transition-all"
+              >
+                {link.label}
+              </button>
+            ))}
           </nav>
 
           {/* Right Action Buttons */}
-          <div className="hidden sm:flex items-center gap-3">
-            {/* Search icon button */}
-            <button 
-              onClick={() => {
-                const el = document.getElementById('tender-search-input');
-                el?.focus();
-                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }}
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors"
-              title="Search Tenders (Press /)"
-            >
-              <Search className="w-4 h-4" />
-            </button>
-
-            {/* Bidder Login */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
-              onClick={() => navigate('/bidder/login')}
-              className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:text-white bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 shadow-xs hover:border-slate-600 transition-all cursor-pointer"
+              onClick={() => handleAuthNavigate('bidder-login')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '10px', cursor: 'pointer' }}
+              className="hidden sm:inline-flex text-xs font-bold text-slate-300 bg-slate-900/90 hover:bg-slate-800 border border-white/[0.12] hover:border-cyan-400/40 shadow-sm transition-all"
             >
-              Bidder Login
-            </button>
-
-            {/* Bidder Sign Up */}
-            <button
-              onClick={() => navigate('/bidder/register')}
-              className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-200 hover:text-white bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 shadow-xs hover:border-slate-600 transition-all cursor-pointer"
-            >
-              Bidder Sign Up
+              <Briefcase className="w-3.5 h-3.5 text-cyan-400" />
+              Bidder Portal
             </button>
 
             {/* Officer Login (Primary Strongest CTA) */}
             <button
-              onClick={() => navigate('/officer/login')}
-              className="px-5 py-2 rounded-lg text-xs font-bold text-white bg-[#0066FF] hover:bg-[#0055D4] shadow-md shadow-blue-600/30 hover:shadow-blue-600/50 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+              onClick={() => handleAuthNavigate('officer-login')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 20px', borderRadius: '10px', cursor: 'pointer' }}
+              className="text-xs font-bold text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-[0_0_25px_rgba(37,99,235,0.6)] transition-all active:scale-95"
             >
-              Officer Login
+              <ShieldCheck className="w-4 h-4 text-blue-100" />
+              Officer Console
             </button>
           </div>
 
-          {/* Mobile menu trigger */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-          >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-
+            {/* Mobile hamburger */}
+            <button 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 rounded-lg text-slate-400 hover:bg-slate-800 border border-white/[0.1]"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile menu drop */}
         {mobileMenuOpen && (
-          <div className="lg:hidden bg-[#070F21] border-b border-slate-800 p-4 space-y-3 shadow-2xl">
-            <a href="#overview" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm font-semibold text-white">Home</a>
-            <a href="#workflow" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm font-semibold text-slate-300">How It Works</a>
-            <a href="#tenders" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm font-semibold text-slate-300">Procurement</a>
-            <a href="#challenge" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm font-semibold text-slate-300">About</a>
-            <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm font-semibold text-slate-300">Help</a>
-            <div className="pt-2 border-t border-slate-800 flex flex-col gap-2">
-              <button 
-                onClick={() => navigate('/officer/login')}
-                className="w-full py-2.5 rounded-lg bg-[#0066FF] text-white font-bold text-xs shadow-md shadow-blue-600/30"
-              >
-                Officer Login
-              </button>
-              <div className="grid grid-cols-2 gap-2">
-                <button 
-                  onClick={() => navigate('/bidder/login')}
-                  className="w-full py-2 rounded-lg bg-slate-800 text-slate-200 font-semibold text-xs border border-slate-700"
-                >
-                  Bidder Login
-                </button>
-                <button 
-                  onClick={() => navigate('/bidder/register')}
-                  className="w-full py-2 rounded-lg bg-slate-800 text-slate-200 font-semibold text-xs border border-slate-700"
-                >
-                  Bidder Sign Up
-                </button>
-              </div>
+          <div className="lg:hidden mt-2 p-4 bg-slate-950/95 border border-white/[0.12] rounded-2xl flex flex-col gap-2 shadow-2xl">
+            <button onClick={() => scrollToSection('problem')} className="text-left px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-white/[0.06] rounded-lg">Why AI</button>
+            <button onClick={() => scrollToSection('how-it-works')} className="text-left px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-white/[0.06] rounded-lg">8-Stage Workflow</button>
+            <button onClick={() => scrollToSection('document-intelligence')} className="text-left px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-white/[0.06] rounded-lg">Document Intelligence</button>
+            <button onClick={() => scrollToSection('tenders')} className="text-left px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-white/[0.06] rounded-lg">Live Tenders</button>
+            <button onClick={() => scrollToSection('faq')} className="text-left px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-white/[0.06] rounded-lg">FAQ</button>
+            <div className="flex gap-2 pt-2 border-t border-white/[0.1]">
+              <button onClick={() => handleAuthNavigate('bidder-login')} className="flex-1 py-2 text-center text-xs font-bold text-slate-300 bg-slate-900 rounded-lg">Bidder Portal</button>
+              <button onClick={() => handleAuthNavigate('officer-login')} className="flex-1 py-2 text-center text-xs font-bold text-white bg-blue-600 rounded-lg">Officer Console</button>
             </div>
           </div>
         )}
       </header>
 
-      {/* ─── 3. HERO SECTION ─────────────────────────────────────────────── */}
-      <section id="overview" className="relative min-h-[580px] lg:min-h-[640px] flex items-center overflow-hidden">
-        
-        {/* Background Refinery Image with Deep Gradient Overlays */}
-        <div className="absolute inset-0 z-0 select-none">
-          <img 
-            src="/cpcl-refinery-hero.jpg" 
-            alt="CPCL Manali Refinery" 
-            className="w-full h-full object-cover object-center scale-102 transition-transform duration-700 opacity-85"
-          />
-          {/* Dark cinematic gradient matching reference */}
-          <div className="absolute inset-0 bg-gradient-to-r from-[#030712] via-[#050B17]/90 to-[#030712]/60" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#030712] via-transparent to-[#030712]/40" />
-        </div>
-
-        {/* Location Caption Top Right */}
-        <div className="absolute top-6 right-6 sm:right-12 z-10 text-right select-none">
-          <div className="text-xs font-bold text-slate-200 tracking-wide">CPCL Manali Refinery</div>
-          <div className="text-[10px] text-slate-400">Chennai, Tamil Nadu</div>
-        </div>
-
-        {/* Hero Content Container */}
-        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-8 py-16 w-full grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+      {/* ─── SECTION 1: HERO SECTION (FUTURISTIC ADVANCED AI COMMAND) ───── */}
+      <section id="hero" className="relative pt-12 pb-20 lg:pt-20 lg:pb-28 px-4 sm:px-8">
+        <div className="max-w-[1360px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-14 items-center">
           
-          {/* Left Column: Hero Copy & CTA */}
-          <div className="lg:col-span-6 space-y-6">
+          {/* Left Hero Content */}
+          <div className="lg:col-span-7 flex flex-col items-start text-left">
             
-            {/* Eyebrow Pill */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-950/70 border border-sky-500/30 text-sky-400 text-[10px] font-bold tracking-wider uppercase shadow-xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
-              <span>AI-POWERED GOVERNMENT PROCUREMENT</span>
+            {/* Top Glowing Badge */}
+            <div 
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 16px', borderRadius: '9999px', marginBottom: '24px' }}
+              className="bg-slate-900/90 border border-cyan-500/40 shadow-[0_0_20px_rgba(6,182,212,0.25)]"
+            >
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400"></span>
+              </span>
+              <span className="text-xs font-bold text-cyan-200 tracking-wide flex items-center gap-1.5 uppercase font-mono">
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                CPCL Sovereign Defense Grade
+              </span>
+              <span className="text-slate-600">|</span>
+              <span className="text-[11px] font-bold text-purple-300 font-mono">
+                Manali Refinery Unit-3
+              </span>
             </div>
 
-            {/* Main Headline */}
-            <h1 className="text-4xl sm:text-5xl lg:text-[56px] font-extrabold text-white tracking-tight leading-[1.12]">
-              Smarter Procurement.<br />
-              <span className="text-[#38BDF8]">Stronger Compliance.</span>
+            {/* Headline with Glowing Holographic Gradient */}
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black text-white tracking-tight leading-[1.08] mb-6">
+              Autonomous Scrutiny. <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 drop-shadow-[0_0_35px_rgba(56,189,248,0.4)]">
+                Zero Fraud Tolerance.
+              </span>
             </h1>
 
-            {/* Description */}
-            <p className="text-sm sm:text-[15px] text-slate-300 font-normal leading-relaxed max-w-lg">
-              Accelerate tender scrutiny, verify complex procurement documents and surface potential compliance risks through one secure, intelligent workspace.
+            {/* Subheading */}
+            <p className="text-base sm:text-lg text-slate-300 leading-relaxed mb-8 max-w-[640px]">
+              Next-generation procurement intelligence purpose-engineered for <strong className="text-white font-semibold">Chennai Petroleum Corporation Limited (MoPNG)</strong>. 
+              Accelerates multi-crore tender scrutiny from 14 days to under 30 minutes with sub-second OCR, 
+              statutory GSTIN cross-checks, and ICAI UDIN tamper seals — with <strong className="text-cyan-300 font-bold">100% human officer final say</strong>.
             </p>
 
-            {/* Action Buttons */}
-            <div className="flex flex-wrap items-center gap-4 pt-1">
-              <a
-                href="#tenders"
-                className="px-6 py-3 rounded-lg font-bold text-xs text-white bg-[#0066FF] hover:bg-[#0055D4] shadow-lg shadow-blue-600/30 hover:shadow-blue-600/50 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 group cursor-pointer"
+            {/* CTA Group */}
+            <div 
+              style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px', marginBottom: '28px' }}
+              className="w-full sm:w-auto"
+            >
+              <button
+                onClick={() => scrollToSection('tenders')}
+                style={{ padding: '15px 28px', borderRadius: '14px', cursor: 'pointer' }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-[0_0_35px_rgba(37,99,235,0.5)] transition-all active:scale-95"
               >
-                <span>Explore Tenders</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-              </a>
+                <Search className="w-4 h-4" />
+                Explore Live CPCL Tenders
+                <ArrowRight className="w-4 h-4" />
+              </button>
 
               <button
-                onClick={() => setHowItWorksModalOpen(true)}
-                className="px-6 py-3 rounded-lg font-bold text-xs text-slate-200 hover:text-white bg-[#0B152A]/90 hover:bg-slate-800/90 border border-slate-700/80 shadow-sm hover:border-slate-600 transition-all flex items-center gap-2.5 cursor-pointer"
+                onClick={() => scrollToSection('document-intelligence')}
+                style={{ padding: '15px 26px', borderRadius: '14px', cursor: 'pointer' }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 text-sm font-bold text-slate-200 bg-slate-900/90 hover:bg-slate-800 border border-white/[0.15] hover:border-cyan-400/40 shadow-lg shadow-black/40 transition-all"
               >
-                <div className="w-4 h-4 rounded-full bg-slate-800 flex items-center justify-center">
-                  <Play className="w-2 h-2 fill-current text-slate-300" />
-                </div>
-                <span>How It Works</span>
+                <Play className="w-4 h-4 text-cyan-400 fill-cyan-400" />
+                Live AI Scanner Demo
               </button>
             </div>
 
-            {/* Feature Sub-strip */}
-            <div className="flex items-center gap-4 text-[11px] text-slate-400 font-medium pt-2 select-none">
-              <div className="flex items-center gap-1.5 hover:text-slate-300 transition-colors">
-                <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
-                <span>AI-assisted</span>
+            {/* Trust Assurance Glowing Pills */}
+            <div 
+              style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', marginBottom: '36px' }}
+              className="w-full"
+            >
+              <span 
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '10px' }}
+                className="bg-cyan-950/60 border border-cyan-500/30 text-xs font-semibold text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.15)]"
+              >
+                <Zap className="w-3.5 h-3.5 text-cyan-400" /> 1.4s OCR Extraction
+              </span>
+              <span 
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '10px' }}
+                className="bg-purple-950/60 border border-purple-500/30 text-xs font-semibold text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.15)]"
+              >
+                <Lock className="w-3.5 h-3.5 text-purple-400" /> SHA-256 Cryptographic Seal
+              </span>
+              <span 
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '10px' }}
+                className="bg-emerald-950/60 border border-emerald-500/30 text-xs font-semibold text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.15)]"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-emerald-400" /> 100% Officer Final Say
+              </span>
+            </div>
+
+            {/* Quick KPI Stat Counter Row as Elevated Neon Dark Cards */}
+            <div 
+              style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}
+              className="w-full"
+            >
+              <div 
+                style={{ padding: '20px 22px', borderRadius: '18px' }}
+                className="bg-slate-900/80 border border-cyan-500/25 shadow-[0_0_25px_rgba(6,182,212,0.1)] text-left"
+              >
+                <div className="text-3xl sm:text-4xl font-black text-cyan-400 drop-shadow-[0_0_10px_rgba(6,182,212,0.4)] font-mono">1.4s</div>
+                <div className="text-xs text-slate-400 font-medium mt-1">Multi-page OCR Speed</div>
               </div>
-              <span className="text-slate-600">·</span>
-              <div className="flex items-center gap-1.5 hover:text-slate-300 transition-colors">
-                <FileCheck2 className="w-3.5 h-3.5 text-sky-400" />
-                <span>Evidence-based</span>
+              <div 
+                style={{ padding: '20px 22px', borderRadius: '18px' }}
+                className="bg-slate-900/80 border border-purple-500/25 shadow-[0_0_25px_rgba(168,85,247,0.1)] text-left"
+              >
+                <div className="text-3xl sm:text-4xl font-black text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.4)] font-mono">99.8%</div>
+                <div className="text-xs text-slate-400 font-medium mt-1">Clause Verification</div>
               </div>
-              <span className="text-slate-600">·</span>
-              <div className="flex items-center gap-1.5 hover:text-slate-300 transition-colors">
-                <UserCheck className="w-3.5 h-3.5 text-sky-400" />
-                <span>Human-controlled</span>
+              <div 
+                style={{ padding: '20px 22px', borderRadius: '18px' }}
+                className="bg-slate-900/80 border border-emerald-500/25 shadow-[0_0_25px_rgba(16,185,129,0.1)] text-left"
+              >
+                <div className="text-3xl sm:text-4xl font-black text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.4)] font-mono">₹450 Cr+</div>
+                <div className="text-xs text-slate-400 font-medium mt-1">Tenders Protected</div>
               </div>
             </div>
 
           </div>
 
-          {/* Right Column: AI Verification Product Card & Floating Cards */}
-          <div className="lg:col-span-6 flex flex-col sm:flex-row items-center sm:items-start gap-4 justify-end">
+          {/* Right Hero Visual: 3D HOLOGRAPHIC SCATTER CONSOLE WITH SCANNING LASER */}
+          <div className="lg:col-span-5 relative">
             
-            {/* ─── MAIN AI VERIFICATION CARD ─────────────────────── */}
-            <div className="w-full sm:w-[325px] rounded-2xl bg-[#081023]/90 backdrop-blur-xl border border-sky-500/30 shadow-2xl p-5 text-xs text-white relative group hover:border-sky-500/50 transition-all">
+            {/* Ambient Multi-Color Halo Glow */}
+            <div className="absolute -inset-2 bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 rounded-3xl blur-2xl opacity-40 animate-pulse -z-10" />
+
+            <div className="relative rounded-3xl overflow-hidden bg-slate-950 border-2 border-cyan-500/40 shadow-[0_0_60px_-10px_rgba(6,182,212,0.35)]">
               
-              {/* Subtle pulsing live scan bar */}
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-sky-400 to-transparent opacity-60 animate-pulse" />
+              {/* Background 3D Artwork from AuthPage */}
+              <div className="relative h-[250px] sm:h-[280px] overflow-hidden">
+                <img
+                  src="/auth-hero.jpg"
+                  alt="3D Crystal AI Intelligence"
+                  className="w-full h-full object-cover opacity-85 mix-blend-screen scale-105 hover:scale-110 transition-transform duration-700"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent" />
 
-              {/* Header */}
-              <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <Fingerprint className="w-4 h-4 text-sky-400" />
-                  <span className="font-bold text-slate-100 tracking-wide">AI VERIFICATION</span>
+                {/* Animated Green / Cyan Laser Scanning Line */}
+                <div 
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    height: '3px',
+                    background: 'linear-gradient(90deg, transparent, #38BDF8, #A855F7, #34D399, transparent)',
+                    boxShadow: '0 0 15px #38BDF8, 0 0 30px #A855F7',
+                    animation: 'laserScan 3s ease-in-out infinite alternate'
+                  }}
+                />
+                <style>{`
+                  @keyframes laserScan {
+                    0% { top: 15%; opacity: 0.8; }
+                    50% { top: 55%; opacity: 1; }
+                    100% { top: 88%; opacity: 0.8; }
+                  }
+                `}</style>
+
+                {/* Top Floating Badge */}
+                <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
+                  <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/90 backdrop-blur-xl border border-cyan-400/30 text-[11px] font-bold text-cyan-300 shadow-lg">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                    ACTIVE OCR NODE: MANALI-01
+                  </span>
+                  <span className="text-[11px] font-mono font-bold text-emerald-300 bg-emerald-950/90 border border-emerald-500/40 px-3 py-0.5 rounded-full backdrop-blur-xl shadow-md">
+                    LATENCY [0.8s]
+                  </span>
                 </div>
-                <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  <span>✦ Live Analysis</span>
+
+                {/* Refinery context label */}
+                <div className="absolute bottom-3 left-4 right-4 z-10">
+                  <p className="text-[11px] font-mono text-cyan-400 font-bold flex items-center gap-1.5">
+                    <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                    CPCL Refinery Unit-3 Hydrocracker Scrutiny
+                  </p>
+                  <h3 className="text-xl font-black text-white tracking-tight drop-shadow-md">
+                    Shakti Engineering Bid Package #128
+                  </h3>
                 </div>
               </div>
 
-              {/* Checklist Rows with interactive hover feel */}
-              <div className="py-3.5 space-y-2.5 text-xs">
-                <div className="flex items-center justify-between p-1.5 rounded hover:bg-slate-800/40 transition-colors">
-                  <span className="text-slate-300 font-medium">GST Certificate</span>
-                  <span className="text-emerald-400 font-bold flex items-center gap-1 font-mono text-[11px]">
-                    <Check className="w-3.5 h-3.5" /> Verified
-                  </span>
+              {/* Lower Inspection Telemetry Panel */}
+              <div className="p-5 bg-slate-900/95 border-t border-white/[0.1]">
+                
+                {/* Real-time Document Check Items */}
+                <div className="space-y-2.5 mb-4 font-mono">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/80 border border-cyan-500/30 text-xs shadow-inner">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-cyan-400" />
+                      <span className="font-semibold text-slate-200">GST Registration (REG-06)</span>
+                    </div>
+                    <span className="text-emerald-400 font-bold flex items-center gap-1 text-[11px] bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
+                      <Check className="w-3 h-3" /> VERIFIED [PASS]
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/80 border border-purple-500/30 text-xs shadow-inner">
+                    <div className="flex items-center gap-2">
+                      <FileCheck2 className="w-4 h-4 text-purple-400" />
+                      <span className="font-semibold text-slate-200">PAN Card (Domestic Public Ltd)</span>
+                    </div>
+                    <span className="text-emerald-400 font-bold flex items-center gap-1 text-[11px] bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
+                      <Check className="w-3 h-3" /> NSDL MATCHED
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-xs shadow-inner">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="w-4 h-4 text-amber-400" />
+                      <div>
+                        <span className="font-semibold text-amber-200 block">CA Turnover Certificate</span>
+                        <span className="text-[10px] text-amber-400/90 font-mono">Surge detected: +130.3% YoY</span>
+                      </div>
+                    </div>
+                    <span className="text-amber-300 font-bold bg-amber-900/60 px-2 py-1 rounded text-[11px] border border-amber-400/40 animate-pulse">
+                      FLAGGED FOR OFFICER
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between p-1.5 rounded hover:bg-slate-800/40 transition-colors">
-                  <span className="text-slate-300 font-medium">PAN</span>
-                  <span className="text-emerald-400 font-bold flex items-center gap-1 font-mono text-[11px]">
-                    <Check className="w-3.5 h-3.5" /> Verified
-                  </span>
+                {/* Micro Metric Telemetry Bar with Glowing Confidence Meter */}
+                <div className="grid grid-cols-3 gap-2 p-3 rounded-xl bg-slate-950 border border-white/[0.08] text-center mb-4">
+                  <div>
+                    <div className="text-[10px] font-semibold text-slate-400 uppercase font-mono">Compliance</div>
+                    <div className="text-lg font-black text-white font-mono">94%</div>
+                  </div>
+                  <div className="border-x border-white/[0.08]">
+                    <div className="text-[10px] font-semibold text-slate-400 uppercase font-mono">Risk Level</div>
+                    <div className="text-lg font-black text-emerald-400 font-mono">LOW</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold text-slate-400 uppercase font-mono">AI Confidence</div>
+                    <div className="text-lg font-black text-cyan-400 font-mono">98.4%</div>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between p-1.5 rounded hover:bg-amber-950/30 transition-colors">
-                  <span className="text-slate-300 font-medium">Turnover Certificate</span>
-                  <span className="text-amber-400 font-bold flex items-center gap-1 font-mono text-[11px]">
-                    <AlertTriangle className="w-3.5 h-3.5" /> Review
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between p-1.5 rounded hover:bg-slate-800/40 transition-colors">
-                  <span className="text-slate-300 font-medium">Experience Certificate</span>
-                  <span className="text-emerald-400 font-bold flex items-center gap-1 font-mono text-[11px]">
-                    <Check className="w-3.5 h-3.5" /> Verified
-                  </span>
-                </div>
-              </div>
-
-              {/* Score & Risk Footer Strip */}
-              <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-800 text-center">
-                <div className="p-1 rounded bg-slate-900/50">
-                  <div className="text-[10px] text-slate-400">Compliance</div>
-                  <div className="text-sm font-bold text-white mt-0.5">94%</div>
-                </div>
-                <div className="p-1 rounded bg-slate-900/50">
-                  <div className="text-[10px] text-slate-400">AI Confidence</div>
-                  <div className="text-sm font-bold text-white mt-0.5">96%</div>
-                </div>
-                <div className="p-1 rounded bg-slate-900/50">
-                  <div className="text-[10px] text-slate-400">Risk</div>
-                  <div className="text-sm font-bold text-emerald-400 mt-0.5">LOW</div>
-                </div>
-              </div>
-
-              {/* View Evidence Link */}
-              <div className="mt-3 pt-2 text-center">
+                {/* Interactive Action: Open Evidence Modal */}
                 <button
                   onClick={() => setEvidenceModalOpen(true)}
-                  className="text-sky-400 hover:text-sky-300 font-semibold text-xs inline-flex items-center gap-1.5 transition-colors group/btn cursor-pointer"
+                  className="w-full py-3 px-4 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-[0_0_25px_rgba(99,102,241,0.5)] transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
                 >
-                  <Eye className="w-3.5 h-3.5 group-hover/btn:scale-110 transition-transform" />
-                  <span>View Evidence →</span>
+                  <Eye className="w-4 h-4 text-cyan-200" />
+                  Inspect Cryptographic Proof &amp; UDIN Citations
+                  <ChevronRight className="w-4 h-4" />
                 </button>
-              </div>
 
+                {/* Audit Seal Footer */}
+                <div className="mt-3 flex items-center justify-between text-[10px] text-slate-400 font-mono pt-2 border-t border-white/[0.08]">
+                  <span className="flex items-center gap-1.5 text-emerald-400">
+                    <Lock className="w-3.5 h-3.5" />
+                    AUDIT TRAIL SEALED
+                  </span>
+                  <span className="text-slate-500">SHA-256: 7f8a9...b4e2</span>
+                </div>
+
+              </div>
             </div>
-
-            {/* ─── STACKED FLOATING CARDS TO THE RIGHT ───────────── */}
-            <div className="flex flex-col gap-3.5 w-full sm:w-[195px]">
-              
-              {/* Floating Card 1: Document Processing */}
-              <div className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-[#08122A]/90 backdrop-blur-md border border-slate-700/70 shadow-xl text-xs hover:border-sky-500/40 transition-all group">
-                <div className="w-9 h-9 rounded-lg bg-sky-950 border border-sky-500/40 flex items-center justify-center text-sky-400 shrink-0 group-hover:scale-105 transition-transform">
-                  <FileText className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="font-bold text-white text-[11px]">Document Processing</div>
-                  <div className="text-[10px] text-slate-300 mt-0.5">OCR Complete</div>
-                  <div className="text-[9px] text-slate-400">1,248 fields extracted</div>
-                </div>
-              </div>
-
-              {/* Floating Card 2: Audit Trail */}
-              <div className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-[#08122A]/90 backdrop-blur-md border border-slate-700/70 shadow-xl text-xs hover:border-cyan-500/40 transition-all group">
-                <div className="w-9 h-9 rounded-lg bg-cyan-950 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shrink-0 group-hover:scale-105 transition-transform">
-                  <ShieldCheck className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="font-bold text-white text-[11px]">Audit Trail</div>
-                  <div className="text-[10px] text-slate-300 mt-0.5">Tamper-Evident</div>
-                  <div className="text-[9px] text-slate-400">SHA-256 Secured</div>
-                </div>
-              </div>
-
-            </div>
-
           </div>
 
         </div>
-
       </section>
 
-      {/* ─── 4. METRICS STRIP ────────────────────────────────────────────── */}
-      <section className="relative z-20 -mt-2 max-w-7xl mx-auto px-6 sm:px-8">
-        <div className="rounded-2xl bg-[#070F22] border border-slate-800/90 shadow-xl p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 divide-y sm:divide-y-0 sm:divide-x divide-slate-800/80">
+      {/* ─── SECTION 2: THE PROCUREMENT BOTTLENECK (CYBER GLASS CARDS) ──── */}
+      <section id="problem" className="py-20 bg-slate-950/60 border-y border-white/[0.08] px-4 sm:px-8 relative">
+        <div className="max-w-[1360px] mx-auto">
           
-          {/* Metric 1 */}
-          <div className="flex items-center gap-4 pt-3 sm:pt-0 sm:px-4 first:pl-0 hover:bg-slate-900/30 p-2 rounded-xl transition-colors">
-            <div className="w-11 h-11 rounded-xl bg-cyan-950/70 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0 shadow-sm">
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xl sm:text-2xl font-black text-white tracking-tight">₹2,480+ Cr</div>
-              <div className="text-xs text-slate-400 font-medium mt-0.5">Tender Value Evaluated</div>
-            </div>
-          </div>
-
-          {/* Metric 2 */}
-          <div className="flex items-center gap-4 pt-3 sm:pt-0 sm:px-4 hover:bg-slate-900/30 p-2 rounded-xl transition-colors">
-            <div className="w-11 h-11 rounded-xl bg-emerald-950/70 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 shadow-sm">
-              <FileCheck2 className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xl sm:text-2xl font-black text-white tracking-tight">98.5%</div>
-              <div className="text-xs text-slate-400 font-medium mt-0.5">Multi-Modal OCR Accuracy</div>
-            </div>
-          </div>
-
-          {/* Metric 3 */}
-          <div className="flex items-center gap-4 pt-3 sm:pt-0 sm:px-4 hover:bg-slate-900/30 p-2 rounded-xl transition-colors">
-            <div className="w-11 h-11 rounded-xl bg-blue-950/70 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0 shadow-sm">
-              <Clock className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xl sm:text-2xl font-black text-white tracking-tight">1.4 Days</div>
-              <div className="text-xs text-slate-400 font-medium mt-0.5">Average Verification Cycle</div>
-            </div>
-          </div>
-
-          {/* Metric 4 */}
-          <div className="flex items-center gap-4 pt-3 sm:pt-0 sm:px-4 last:pr-0 hover:bg-slate-900/30 p-2 rounded-xl transition-colors">
-            <div className="w-11 h-11 rounded-xl bg-purple-950/70 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0 shadow-sm">
-              <Shield className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xl sm:text-2xl font-black text-white tracking-tight">100%</div>
-              <div className="text-xs text-slate-400 font-medium mt-0.5">Tamper-Evident Audit Coverage</div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* ─── 5. THE PROCUREMENT CHALLENGE ────────────────────────────────── */}
-      <section id="challenge" className="py-20 px-6 sm:px-8 max-w-7xl mx-auto">
-        
-        {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
-          <div>
-            <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">
-              THE PROCUREMENT CHALLENGE
+          <div className="text-center max-w-[800px] mx-auto mb-16">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-rose-950/70 border border-rose-500/40 text-xs font-bold text-rose-400 uppercase tracking-widest mb-4 font-mono shadow-[0_0_15px_rgba(244,63,94,0.2)]">
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+              The Public Procurement Vulnerability
             </span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mt-1.5 mb-2">
-              Government procurement is complex.
+            <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+              Why Traditional Manual Scrutiny Breaks Down
             </h2>
-            <p className="text-xs sm:text-sm text-slate-400 max-w-2xl leading-relaxed">
-              Large bid volumes, extensive documentation and multiple eligibility requirements make manual verification difficult to scale, increasing the risk of delays and inconsistencies.
+            <p className="text-slate-400 text-base sm:text-lg mt-4 leading-relaxed">
+              Chennai Petroleum Corporation Limited executes mission-critical refinery tenders. 
+              Manual human reading of hundreds of 500-page scanned filings introduces massive commercial delays and audit vulnerabilities.
             </p>
           </div>
 
-          <a 
-            href="#workflow"
-            className="self-start md:self-auto px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
-          >
-            <span>Learn More</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </a>
+          {/* 4 Glowing Cyber Problem Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+            
+            {/* Card 1: Document Overload */}
+            <div className="p-7 rounded-2xl bg-slate-900/70 border border-rose-500/30 shadow-[0_0_30px_rgba(244,63,94,0.1)] hover:border-rose-500/60 transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center font-extrabold text-base mb-5 shadow-[0_0_15px_rgba(244,63,94,0.3)]">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">Massive Document Volumes</h3>
+                <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                  A single turnaround tender receives 40+ vendor submissions, each containing 200–500 pages of unsearchable PDFs, audited ledgers, and credentials.
+                </p>
+              </div>
+              <div className="text-[11px] font-mono font-bold text-rose-300 bg-rose-950/60 border border-rose-500/30 px-3 py-1.5 rounded-lg inline-block text-center">
+                8,000+ pages per tender
+              </div>
+            </div>
+
+            {/* Card 2: Manual Bottleneck */}
+            <div className="p-7 rounded-2xl bg-slate-900/70 border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.1)] hover:border-amber-500/60 transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center font-extrabold text-base mb-5 shadow-[0_0_15px_rgba(245,158,11,0.3)]">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">14-Day Scrutiny Delays</h3>
+                <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                  Procurement officers spend weeks manually cross-typing turnover numbers into offline spreadsheets, delaying refinery maintenance shutdown schedules.
+                </p>
+              </div>
+              <div className="text-[11px] font-mono font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30 px-3 py-1.5 rounded-lg inline-block text-center">
+                Avg 14 days manual review
+              </div>
+            </div>
+
+            {/* Card 3: Discrepancy Risk */}
+            <div className="p-7 rounded-2xl bg-slate-900/70 border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.1)] hover:border-purple-500/60 transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-400 flex items-center justify-center font-extrabold text-base mb-5 shadow-[0_0_15px_rgba(168,85,247,0.3)]">
+                  <Search className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">Hidden Cross-Doc Flaws</h3>
+                <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                  Mismatches between PAN entity types, invalid CA UDIN numbers, and abnormal YoY turnover surges slip past human visual inspection unnoticed.
+                </p>
+              </div>
+              <div className="text-[11px] font-mono font-bold text-purple-300 bg-purple-950/60 border border-purple-500/30 px-3 py-1.5 rounded-lg inline-block text-center">
+                High risk of human oversight
+              </div>
+            </div>
+
+            {/* Card 4: Audit Exposure */}
+            <div className="p-7 rounded-2xl bg-slate-900/70 border border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.1)] hover:border-cyan-500/60 transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 flex items-center justify-center font-extrabold text-base mb-5 shadow-[0_0_15px_rgba(6,182,212,0.3)]">
+                  <Scale className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">Audit & Vigilance Exposure</h3>
+                <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                  Without cryptographic timestamps and immutable audit records, decisions face intense scrutiny and legal challenges under CVC and CAG audits.
+                </p>
+              </div>
+              <div className="text-[11px] font-mono font-bold text-cyan-300 bg-cyan-950/60 border border-cyan-500/30 px-3 py-1.5 rounded-lg inline-block text-center">
+                Zero tamper-proofing
+              </div>
+            </div>
+
+          </div>
+
+          {/* Side-by-Side High Impact Transformation Box */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 sm:p-10 rounded-3xl bg-slate-900/90 border border-white/[0.12] shadow-2xl">
+            
+            {/* The Old Way */}
+            <div className="p-6 rounded-2xl bg-rose-950/20 border border-rose-500/30">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="w-3 h-3 rounded-full bg-rose-500"></span>
+                <span className="text-xs font-mono font-bold text-rose-400 uppercase tracking-wider">Before: The Manual Struggle</span>
+              </div>
+              <ul className="space-y-3.5 text-xs text-slate-300">
+                <li className="flex items-start gap-2.5">
+                  <X className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <span>Manual page-by-page inspection of dense, unindexed scanned PDF filings</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <X className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <span>Manual calculator arithmetic for 3-year turnover thresholds and MSME relaxations</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <X className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <span>No automated CA UDIN verification to catch fraudulent balance sheets</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <X className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <span>Fragmented offline spreadsheet notes with zero tamper-proof cryptographic audit trail</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* The BidVerify AI Way */}
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-blue-950/50 via-slate-900 to-cyan-950/40 border border-cyan-500/40 shadow-[0_0_30px_rgba(6,182,212,0.15)]">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse"></span>
+                <span className="text-xs font-mono font-bold text-cyan-300 uppercase tracking-wider">With CPCL Sovereign Procurement</span>
+              </div>
+              <ul className="space-y-3.5 text-xs text-slate-200">
+                <li className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <span><strong>Sub-second OCR extraction</strong> with direct bounding box citations onto the source document</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <span><strong>Automated rule engine</strong> calculating compliance against GFR 2017 & CPCL Manual specifications</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <span><strong>Direct ICAI CA UDIN integrity ping</strong> catching fake or revoked certificates instantly</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <span><strong>Cryptographic SHA-256 sealed audit trail</strong> defending every decision before CVO and CAG audits</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
         </div>
-
-        {/* 4 Cards Grid matching reference */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          
-          {/* Card 01 */}
-          <div className="p-6 rounded-xl bg-[#070F22] border border-slate-800/80 hover:border-slate-700 hover:bg-[#09132B] transition-all flex flex-col justify-between group">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-9 h-9 rounded-lg bg-blue-950/60 border border-blue-500/30 flex items-center justify-center text-blue-400 group-hover:scale-105 transition-transform">
-                  <FileText className="w-4 h-4" />
-                </div>
-                <span className="text-xs font-mono font-bold text-slate-500">01</span>
-              </div>
-              <h3 className="text-base font-bold text-white mb-2">Large Document Volumes</h3>
-              <p className="text-[13px] text-slate-300 leading-relaxed font-normal">
-                Hundreds of bidders can generate thousands of documents requiring verification.
-              </p>
-            </div>
-          </div>
-
-          {/* Card 02 */}
-          <div className="p-6 rounded-xl bg-[#070F22] border border-slate-800/80 hover:border-slate-700 hover:bg-[#09132B] transition-all flex flex-col justify-between group">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-9 h-9 rounded-lg bg-blue-950/60 border border-blue-500/30 flex items-center justify-center text-blue-400 group-hover:scale-105 transition-transform">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <span className="text-xs font-mono font-bold text-slate-500">02</span>
-              </div>
-              <h3 className="text-base font-bold text-white mb-2">Manual Verification</h3>
-              <p className="text-[13px] text-slate-300 leading-relaxed font-normal">
-                Officers spend significant time checking repetitive information.
-              </p>
-            </div>
-          </div>
-
-          {/* Card 03 */}
-          <div className="p-6 rounded-xl bg-[#070F22] border border-slate-800/80 hover:border-slate-700 hover:bg-[#09132B] transition-all flex flex-col justify-between group">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-9 h-9 rounded-lg bg-rose-950/60 border border-rose-500/30 flex items-center justify-center text-rose-400 group-hover:scale-105 transition-transform">
-                  <AlertTriangle className="w-4 h-4" />
-                </div>
-                <span className="text-xs font-mono font-bold text-slate-500">03</span>
-              </div>
-              <h3 className="text-base font-bold text-white mb-2">Hidden Inconsistencies</h3>
-              <p className="text-[13px] text-slate-300 leading-relaxed font-normal">
-                Potential mismatches or anomalies may be difficult to identify manually.
-              </p>
-            </div>
-          </div>
-
-          {/* Card 04 */}
-          <div className="p-6 rounded-xl bg-[#070F22] border border-slate-800/80 hover:border-slate-700 hover:bg-[#09132B] transition-all flex flex-col justify-between group">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-9 h-9 rounded-lg bg-purple-950/60 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform">
-                  <Eye className="w-4 h-4" />
-                </div>
-                <span className="text-xs font-mono font-bold text-slate-500">04</span>
-              </div>
-              <h3 className="text-base font-bold text-white mb-2">Limited Visibility</h3>
-              <p className="text-[13px] text-slate-300 leading-relaxed font-normal">
-                Teams need a clearer view of verification progress and required actions.
-              </p>
-            </div>
-          </div>
-
-        </div>
-
       </section>
 
-      {/* ─── 6. END-TO-END WORKFLOW ──────────────────────────────────────── */}
-      <section id="workflow" className="py-20 bg-[#040918] border-y border-slate-900">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8">
+      {/* ─── SECTION 3: INTERACTIVE 8-STAGE WORKFLOW PIPELINE ───────────── */}
+      <section id="how-it-works" className="py-24 px-4 sm:px-8 relative">
+        <div className="max-w-[1360px] mx-auto">
           
-          {/* Header with Right Principle Card */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-14 gap-6">
-            <div>
-              <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">
-                ONE PLATFORM, END-TO-END
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mt-1 mb-2">
-                From Tender to Verified Decision.
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-400 max-w-xl leading-relaxed">
-                A connected workflow that brings tender management, document intelligence, compliance and risk analysis into one platform.
-              </p>
-            </div>
-
-            {/* Principle Card matching reference */}
-            <div className="p-4 rounded-xl bg-[#08122A] border border-sky-500/30 flex items-center gap-3.5 max-w-md shrink-0 shadow-lg">
-              <div className="w-10 h-10 rounded-lg bg-blue-950/80 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-white">AI assists. Rules validate. Officers decide.</div>
-                <div className="text-[11px] text-slate-400">Intelligence for better analysis. Humans for better decisions.</div>
-              </div>
-            </div>
+          <div className="text-center max-w-[800px] mx-auto mb-16">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-blue-950/70 border border-blue-500/40 text-xs font-bold text-blue-400 uppercase tracking-widest mb-4 font-mono shadow-[0_0_15px_rgba(37,99,235,0.2)]">
+              <Activity className="w-3.5 h-3.5 text-blue-400" />
+              End-to-End Operational Pipeline
+            </span>
+            <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+              From Tender Release to Sovereign Contract Award
+            </h2>
+            <p className="text-slate-400 text-base sm:text-lg mt-4">
+              Click through the 8 stages below to inspect the computational intelligence and official controls executing at each step.
+            </p>
           </div>
 
-          {/* 7 Workflow Steps Horizontal Rail with Clickable Interactive Polish */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4 relative">
-            {workflowSteps.map((step, idx) => {
-              const IconComp = step.icon;
-              const isActive = activeWorkflowStep === idx;
+          {/* Interactive Stepper Navigation Pills */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-8">
+            {workflowStages.map((stage, idx) => {
+              const isActive = activeWorkflowStage === idx;
               return (
                 <button
-                  key={step.num}
-                  onClick={() => setActiveWorkflowStep(isActive ? null : idx)}
-                  className={`p-4 rounded-xl border text-center flex flex-col items-center transition-all cursor-pointer text-left ${
+                  key={stage.step}
+                  onClick={() => setActiveWorkflowStage(idx)}
+                  className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
                     isActive 
-                      ? 'bg-blue-950/70 border-sky-400 shadow-lg shadow-sky-500/20 scale-[1.03]' 
-                      : 'bg-[#070F22] border-slate-800/80 hover:border-slate-700 hover:bg-[#09132B]'
+                      ? 'bg-gradient-to-b from-blue-600 to-indigo-700 text-white border-cyan-400 shadow-[0_0_25px_rgba(6,182,212,0.4)] scale-105' 
+                      : 'bg-slate-900/80 text-slate-300 border-white/[0.1] hover:border-cyan-500/50 hover:bg-slate-800'
                   }`}
                 >
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-2.5 transition-colors ${
-                    step.color === 'cyan' 
-                      ? 'bg-cyan-950/60 border border-cyan-500/30 text-cyan-400'
-                      : step.color === 'emerald'
-                      ? 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-400'
-                      : 'bg-blue-950/60 border border-blue-500/30 text-blue-400'
-                  }`}>
-                    <IconComp className="w-4 h-4" />
+                  <div className={`text-[10px] font-mono font-bold mb-1 ${isActive ? 'text-cyan-200' : 'text-slate-500'}`}>
+                    STAGE {stage.step}
                   </div>
-                  <span className="text-[10px] font-mono text-slate-400">{step.num}</span>
-                  <div className="text-xs font-bold text-white mt-0.5">{step.title}</div>
-                  <p className="text-[11px] text-slate-300 leading-tight mt-1.5 font-normal">
-                    {step.desc}
-                  </p>
+                  <div className="text-xs font-bold truncate">
+                    {stage.title}
+                  </div>
                 </button>
               );
             })}
           </div>
 
-          {/* Expandable Step Detail Drawer (Elevates UX without breaking layout) */}
-          {activeWorkflowStep !== null && (
-            <div className="mt-6 p-5 rounded-xl bg-[#070F22] border border-sky-500/40 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded bg-blue-500/20 text-sky-400 font-mono text-[10px] font-bold">
-                    STAGE {workflowSteps[activeWorkflowStep].num} DEEP DIVE
+          {/* Active Stage Detailed Inspection Card */}
+          {(() => {
+            const currentStage = workflowStages[activeWorkflowStage];
+            return (
+              <div className="p-8 sm:p-10 rounded-3xl bg-slate-900/90 border border-white/[0.12] shadow-2xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                
+                <div className="lg:col-span-7">
+                  <div className="flex items-center gap-3 mb-5">
+                    <span className="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-400 text-white flex items-center justify-center font-mono font-black text-lg shadow-[0_0_20px_rgba(6,182,212,0.4)]">
+                      {currentStage.step}
+                    </span>
+                    <div>
+                      <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider">
+                        {currentStage.badge}
+                      </span>
+                      <h3 className="text-2xl sm:text-3xl font-black text-white">
+                        {currentStage.title}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <p className="text-slate-300 text-base leading-relaxed mb-6">
+                    {currentStage.desc}
+                  </p>
+
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 font-mono">Input Artifacts:</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {currentStage.inputs.map((inp, i) => (
+                          <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 text-slate-300 text-xs font-medium border border-white/[0.1]">
+                            <FileCheck2 className="w-3.5 h-3.5 text-cyan-400" />
+                            {inp}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 font-mono">Sovereign Output:</h4>
+                      <p className="text-xs font-semibold text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 px-3.5 py-2.5 rounded-xl font-mono">
+                        ✓ {currentStage.output}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Visual Console Preview */}
+                <div className="lg:col-span-5 p-6 rounded-2xl bg-slate-950 text-slate-200 border border-cyan-500/30 shadow-inner font-mono text-xs">
+                  <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/[0.1] text-slate-400">
+                    <span className="flex items-center gap-2 text-cyan-300">
+                      <Terminal className="w-4 h-4 text-cyan-400" />
+                      <span>STAGE_{currentStage.step}_EXEC.sh</span>
+                    </span>
+                    <span className="text-[11px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/30">STATUS: 200 OK</span>
+                  </div>
+                  
+                  <div className="space-y-2 text-[11px] leading-relaxed">
+                    <p className="text-slate-500"># CPCL Sovereign Processing Pipeline</p>
+                    <p className="text-cyan-300">
+                      &gt; execute_module --stage="{currentStage.step}" --proc="CPCL/PROC/2026/128"
+                    </p>
+                    <p className="text-slate-300">
+                      [INFO] Running algorithmic validation against GFR 2017 & CPCL Manual.
+                    </p>
+                    <p className="text-emerald-400">
+                      [AUTH] Cryptographic check: SHA-256 verification PASS.
+                    </p>
+                    <p className="text-purple-300">
+                      [AI] Confidence metric: 99.4% (No hallucinations detected).
+                    </p>
+                    <p className="text-amber-300">
+                      [LOG] Audit entry committed to immutable CPCL ledger.
+                    </p>
+                  </div>
+
+                  <div className="mt-6 pt-3 border-t border-white/[0.1] flex justify-between items-center text-[11px] text-slate-400">
+                    <span>Officer Sign-off: REQUIRED</span>
+                    <button 
+                      onClick={() => handleAuthNavigate('officer-login')} 
+                      className="text-cyan-400 hover:text-cyan-300 font-bold cursor-pointer"
+                    >
+                      Login to Inspect &rarr;
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            );
+          })()}
+
+        </div>
+
+      </section>
+
+      {/* ─── SECTION 4: INTERACTIVE DOCUMENT INTELLIGENCE SHOWCASE ─────── */}
+      <section id="document-intelligence" className="py-24 bg-slate-950/70 border-y border-white/[0.08] px-4 sm:px-8 relative">
+        <div className="max-w-[1360px] mx-auto">
+          
+          <div className="text-center max-w-[800px] mx-auto mb-16">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-purple-950/70 border border-purple-500/40 text-xs font-bold text-purple-400 uppercase tracking-widest mb-4 font-mono shadow-[0_0_15px_rgba(168,85,247,0.2)]">
+              <Cpu className="w-3.5 h-3.5 text-purple-400" />
+              Document Intelligence Console
+            </span>
+            <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+              Interactive Bounding Box &amp; Rule Verification
+            </h2>
+            <p className="text-slate-400 text-base sm:text-lg mt-4">
+              Select any document type below to see how BidVerify AI extracts structured entities from raw PDFs and tests them against statutory CPCL rules.
+            </p>
+          </div>
+
+          {/* Document Tab Switcher */}
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
+            {[
+              { id: 'gst', label: 'GST Certificate (REG-06)', icon: FileText, color: 'text-cyan-400' },
+              { id: 'pan', label: 'PAN Card (Corporate)', icon: FileCheck2, color: 'text-purple-400' },
+              { id: 'turnover', label: 'Turnover & CA UDIN', icon: FileSpreadsheet, color: 'text-amber-400' },
+              { id: 'experience', label: 'Work Experience', icon: Award, color: 'text-emerald-400' },
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isSelected = selectedDocTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setSelectedDocTab(tab.id);
+                    setShowWhyAnomaly(true);
+                  }}
+                  className={`inline-flex items-center gap-2.5 px-6 py-3 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                    isSelected 
+                      ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-[0_0_25px_rgba(6,182,212,0.4)] scale-105' 
+                      : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-white/[0.1]'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 3-Column Interactive Console */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-slate-900/90 rounded-3xl p-6 sm:p-8 text-white shadow-2xl border border-cyan-500/30">
+            
+            {/* Column 1: Document OCR Preview with Bounding Highlight (5 cols) */}
+            <div className="lg:col-span-5 flex flex-col justify-between p-5 rounded-2xl bg-slate-950 border border-white/[0.08]">
+              <div>
+                <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/[0.08]">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-cyan-400" />
+                    <span className="text-xs font-mono font-bold text-slate-200 truncate max-w-[220px]">
+                      {currentDoc.name}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono text-cyan-300 bg-cyan-950/80 border border-cyan-500/40 px-2.5 py-0.5 rounded shadow-xs">
+                    CONFIDENCE: {currentDoc.confidence}
                   </span>
-                  <span className="text-xs font-bold text-white">{workflowSteps[activeWorkflowStep].title}</span>
                 </div>
-                <div className="text-xs text-slate-200">
-                  <strong className="text-sky-400">Officer Responsibility:</strong> {workflowSteps[activeWorkflowStep].officerDuty}
+
+                <div className="text-[11px] font-mono text-slate-400 mb-3">
+                  Issuer: <span className="text-slate-200 font-semibold">{currentDoc.issuer}</span>
                 </div>
-                <div className="text-xs text-slate-300">
-                  <strong className="text-emerald-400">Autonomous AI Role:</strong> {workflowSteps[activeWorkflowStep].aiDuty}
+
+                {/* Simulated Document OCR Page */}
+                <div className="p-4 rounded-xl bg-slate-900/90 border border-white/[0.08] text-[11px] font-mono text-slate-300 leading-relaxed whitespace-pre-wrap relative overflow-hidden">
+                  {currentDoc.docSnippet}
+
+                  {/* Bounding Box Highlight Overlay */}
+                  <div className="mt-3 p-2.5 rounded-lg bg-cyan-500/15 border-2 border-cyan-400 text-cyan-200 font-bold text-xs flex items-center justify-between shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+                    <span>Bounding Box: {currentDoc.boundingHighlight}</span>
+                    <span className="text-[10px] bg-cyan-600 text-white px-2 py-0.5 rounded font-mono">PAGE 1</span>
+                  </div>
                 </div>
               </div>
-              <button
-                onClick={() => setActiveWorkflowStep(null)}
-                className="text-xs text-slate-400 hover:text-white px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors shrink-0 cursor-pointer"
-              >
-                Close Drawer
-              </button>
+
+              <div className="mt-4 pt-3 border-t border-white/[0.08] flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                <span>OCR Latency: 0.84s</span>
+                <span className="text-emerald-400">SHA-256 Checksum PASS</span>
+              </div>
             </div>
-          )}
+
+            {/* Column 2: Extracted Structured Entities (3 cols) */}
+            <div className="lg:col-span-3 p-5 rounded-2xl bg-slate-950 border border-white/[0.08] flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/[0.08]">
+                  <span className="text-xs font-mono font-bold text-slate-200 uppercase">
+                    Extracted Entities
+                  </span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                </div>
+
+                <div className="space-y-3">
+                  {currentDoc.extracted.map((item, i) => (
+                    <div key={i} className="p-3 rounded-xl bg-slate-900 border border-white/[0.08] text-xs">
+                      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1 font-mono">
+                        {item.label}
+                      </div>
+                      <div className="font-mono font-bold text-white flex items-center justify-between">
+                        <span className="truncate mr-2">{item.value}</span>
+                        {item.status === 'verified' && (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-white/[0.08] text-[10px] text-slate-400 font-mono">
+                JSON schema mapped to GFR fields
+              </div>
+            </div>
+
+            {/* Column 3: Statutory Rule Engine & Explainable AI (4 cols) */}
+            <div className="lg:col-span-4 p-5 rounded-2xl bg-slate-950 border border-white/[0.08] flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/[0.08]">
+                  <span className="text-xs font-mono font-bold text-slate-200 uppercase">
+                    Rule Engine Evaluation
+                  </span>
+                  <span className="text-[10px] font-mono text-purple-300 bg-purple-950/80 border border-purple-500/40 px-2 py-0.5 rounded">
+                    DETERMINISTIC
+                  </span>
+                </div>
+
+                <div className="space-y-3 mb-4">
+                  {currentDoc.compliance.map((rule, i) => (
+                    <div 
+                      key={i} 
+                      className={`p-3.5 rounded-xl border text-xs ${
+                        rule.pass 
+                          ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300' 
+                          : 'bg-amber-950/50 border-amber-500/50 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="font-mono text-[10px] font-bold text-slate-400">{rule.rule}</span>
+                        <span className="font-mono font-bold text-[10px]">
+                          {rule.pass ? '✓ PASS' : '⚠️ REVIEW REQUIRED'}
+                        </span>
+                      </div>
+                      <div className="font-semibold text-[11px] leading-snug">
+                        {rule.label}
+                      </div>
+                    </div>
+                  </div>
+
+                {/* Explainable AI Toggle for Turnover Anomaly */}
+                {selectedDocTab === 'turnover' && (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => setShowWhyAnomaly(!showWhyAnomaly)}
+                      className="w-full py-2.5 px-3.5 rounded-xl text-xs font-bold text-amber-300 bg-amber-950/70 border border-amber-500/50 hover:bg-amber-900/60 transition-colors flex items-center justify-between cursor-pointer"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <HelpCircle className="w-4 h-4 text-amber-400" />
+                        Why was this flagged? (Explainable AI)
+                      </span>
+                      {showWhyAnomaly ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+
+                    {showWhyAnomaly && (
+                      <div className="mt-2.5 p-3.5 rounded-xl bg-slate-900 border border-amber-500/40 text-[11px] text-slate-300 font-mono space-y-2 shadow-inner">
+                        <p className="text-amber-300 font-bold">ANOMALY EXPLANATION REPORT:</p>
+                        <p>1. FY 2024-25 Turnover: ₹21.10 Cr</p>
+                        <p>2. FY 2025-26 Turnover: ₹48.60 Cr</p>
+                        <p className="text-rose-400 font-bold">
+                          3. YoY Surge: +130.33% (Surpasses normal PSU industrial tolerance of 50%).
+                        </p>
+                        <p className="text-slate-400">
+                          Recommendation: Procurement Officer should request GST Return (GSTR-9C) reconciliation statement before commercial opening.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-white/[0.08] flex items-center justify-between">
+                <span className="text-[10px] text-slate-400 font-mono">Zero AI Hallucinations</span>
+                <button
+                  onClick={() => setEvidenceModalOpen(true)}
+                  className="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+                >
+                  Full Audit Log &rarr;
+                </button>
+              </div>
+            </div>
+
+          </div>
 
         </div>
       </section>
 
-      {/* ─── 7. OFFICER / BIDDER EXPERIENCE (Two Large Side-by-Side Panels) ─── */}
-      <section className="py-20 px-6 sm:px-8 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      {/* ─── SECTION 5: BENTO GRID OF PLATFORM SUPERPOWERS ─────────────── */}
+      <section className="py-24 px-4 sm:px-8 relative">
+        <div className="max-w-[1360px] mx-auto">
           
-          {/* ─── PANEL 1: FOR PROCUREMENT OFFICERS ────────────────── */}
-          <div className="rounded-2xl bg-[#070F22] border border-slate-800 p-6 sm:p-8 flex flex-col justify-between hover:border-slate-700/90 transition-all shadow-xl">
-            <div>
-              {/* Pill */}
-              <div className="inline-block px-3 py-1 rounded-md bg-blue-950/70 border border-blue-500/30 text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-4">
-                FOR PROCUREMENT OFFICERS
+          <div className="text-center max-w-[800px] mx-auto mb-16">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-950/70 border border-emerald-500/40 text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4 font-mono shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+              Sovereign Platform Superpowers
+            </span>
+            <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+              Engineered for High-Stakes Public Procurement
+            </h2>
+            <p className="text-slate-400 text-base sm:text-lg mt-4">
+              Cryptographic precision, institutional security, and strict statutory alignment.
+            </p>
+          </div>
+
+          {/* Bento Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            
+            {/* Bento 1: Rapid Ingestion (2 cols) */}
+            <div className="md:col-span-2 p-8 rounded-3xl bg-slate-900/80 border border-white/[0.1] shadow-2xl flex flex-col justify-between hover:border-cyan-500/40 transition-all">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-400 text-white flex items-center justify-center font-extrabold mb-6 shadow-[0_0_20px_rgba(6,182,212,0.4)]">
+                  <Zap className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-mono font-bold text-cyan-400 uppercase">Sub-Second Processing</span>
+                <h3 className="text-2xl sm:text-3xl font-black text-white mt-1 mb-3">
+                  1.4-Second Multi-Modal Ingestion
+                </h3>
+                <p className="text-slate-300 text-sm leading-relaxed mb-6">
+                  Extracts complex financial tables, balance sheets, and scanned official seals across 500+ page bid filings without manual copy-pasting.
+                </p>
               </div>
 
-              {/* Title & Desc */}
-              <h3 className="text-2xl font-black text-white mb-2 leading-tight">
-                Your Procurement<br />Command Center.
-              </h3>
-              <p className="text-xs text-slate-400 leading-relaxed mb-6">
-                Manage tenders, review bidders, verify documents, monitor compliance and make informed decisions.
-              </p>
-
-              {/* Checklist & Mini Dashboard Preview */}
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-center mb-6">
-                
-                {/* Checklist */}
-                <div className="sm:col-span-5 space-y-2.5 text-xs font-medium text-slate-300">
-                  <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Tender Management</span>
+              {/* Benchmark comparison bar */}
+              <div className="space-y-3.5 p-5 rounded-2xl bg-slate-950 border border-white/[0.08] text-xs">
+                <div>
+                  <div className="flex justify-between text-slate-400 font-semibold mb-1.5 font-mono">
+                    <span>Traditional Manual Human Review</span>
+                    <span className="text-rose-400 font-bold">14 Days (336 hrs)</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Bidder Verification</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Compliance Analysis</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Risk Intelligence</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Reports & Audit Trail</span>
+                  <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-rose-500 w-full shadow-[0_0_10px_rgba(244,63,94,0.5)]"></div>
                   </div>
                 </div>
-
-                {/* Mini Dashboard Preview Widget matching reference */}
-                <div className="sm:col-span-7 rounded-xl bg-[#040816] border border-slate-800 p-4 text-[10px]">
-                  
-                  {/* Overview Header */}
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-800/80 mb-2.5">
-                    <span className="font-bold text-slate-200">Tender Overview</span>
-                    <span className="text-slate-500 text-[9px] cursor-pointer hover:text-slate-300">Overview DE08 ▾</span>
+                <div>
+                  <div className="flex justify-between text-cyan-300 font-bold mb-1.5 font-mono">
+                    <span>BidVerify AI Sovereign Pipeline</span>
+                    <span className="text-cyan-400 font-bold">18 Minutes</span>
                   </div>
-
-                  {/* 3 Metric Pills */}
-                  <div className="grid grid-cols-3 gap-1.5 mb-3 text-center">
-                    <div className="bg-slate-900/90 p-2 rounded hover:bg-slate-800 transition-colors">
-                      <div className="font-bold text-white text-xs">48</div>
-                      <div className="text-[8px] text-slate-400 truncate">Active Tenders</div>
-                    </div>
-                    <div className="bg-slate-900/90 p-2 rounded hover:bg-slate-800 transition-colors">
-                      <div className="font-bold text-white text-xs">12</div>
-                      <div className="text-[8px] text-slate-400 truncate">Pending Review</div>
-                    </div>
-                    <div className="bg-slate-900/90 p-2 rounded hover:bg-slate-800 transition-colors">
-                      <div className="font-bold text-rose-400 text-xs">3</div>
-                      <div className="text-[8px] text-rose-400 truncate">High Risk</div>
-                    </div>
+                  <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 w-[7%] shadow-[0_0_15px_rgba(6,182,212,0.7)]"></div>
                   </div>
-
-                  {/* Compliance Bar Chart with Interactive Hover Tooltip */}
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-semibold text-slate-300 text-[9px]">Compliance Overview</span>
-                    <button 
-                      onClick={() => setEvidenceModalOpen(true)}
-                      className="text-sky-400 hover:text-sky-300 text-[8px] font-medium cursor-pointer"
-                    >
-                      View Reports →
-                    </button>
-                  </div>
-                  
-                  <div className="h-16 flex items-end justify-between gap-1 pt-2 px-1 relative">
-                    {complianceMonthlyData.map((item, i) => (
-                      <div 
-                        key={i} 
-                        className="flex-1 flex flex-col items-center gap-1 cursor-pointer relative group/bar"
-                        onMouseEnter={() => setHoveredBarIndex(i)}
-                        onMouseLeave={() => setHoveredBarIndex(null)}
-                      >
-                        {hoveredBarIndex === i && (
-                          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 border border-slate-700 text-white text-[9px] font-bold px-2 py-1 rounded shadow-lg whitespace-nowrap z-20">
-                            {item.month}: {item.value}% ({item.verified} verified)
-                          </div>
-                        )}
-                        <div 
-                          className="w-full bg-[#0066FF] group-hover/bar:bg-sky-400 rounded-t-xs transition-colors"
-                          style={{ height: `${item.value}%` }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-between text-[8px] text-slate-500 px-0.5 mt-1 select-none font-medium">
-                    {complianceMonthlyData.map((d, idx) => (
-                      <span key={idx}>{d.month}</span>
-                    ))}
-                  </div>
-
                 </div>
-
               </div>
             </div>
 
-            {/* CTA Button */}
-            <button
-              onClick={() => navigate('/officer/login')}
-              className="w-full sm:w-auto self-start px-6 py-3 rounded-lg bg-[#0066FF] hover:bg-[#0055D4] text-white font-bold text-xs shadow-md shadow-blue-600/30 hover:shadow-blue-600/50 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 group cursor-pointer"
-            >
-              <span>Open Officer Portal</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </button>
-          </div>
-
-          {/* ─── PANEL 2: FOR BIDDERS / APPLICANTS ─────────────────── */}
-          <div className="rounded-2xl bg-[#070F22] border border-slate-800 p-6 sm:p-8 flex flex-col justify-between hover:border-slate-700/90 transition-all shadow-xl">
-            <div>
-              {/* Pill */}
-              <div className="inline-block px-3 py-1 rounded-md bg-emerald-950/70 border border-emerald-500/30 text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-4">
-                FOR BIDDERS / APPLICANTS
+            {/* Bento 2: SHA-256 Tamper Sealing (1 col) */}
+            <div className="p-8 rounded-3xl bg-slate-900/80 border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.1)] flex flex-col justify-between hover:border-purple-500/60 transition-all">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-400 flex items-center justify-center font-extrabold mb-6 shadow-[0_0_15px_rgba(168,85,247,0.3)]">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-mono font-bold text-purple-400 uppercase">Cryptographic Integrity</span>
+                <h3 className="text-xl font-bold text-white mt-1 mb-3">
+                  Immutable SHA-256 Hashes
+                </h3>
+                <p className="text-slate-400 text-xs leading-relaxed">
+                  Every document receives a cryptographic seal immediately upon upload. Zero possibility of post-bid manipulation.
+                </p>
               </div>
 
-              {/* Title & Desc */}
-              <h3 className="text-2xl font-black text-white mb-2 leading-tight">
-                A Simpler Way<br />to Participate.
-              </h3>
-              <p className="text-xs text-slate-400 leading-relaxed mb-6">
-                Discover tenders, submit applications, upload documents and track verification progress.
-              </p>
+              <div className="mt-6 p-3 rounded-xl bg-purple-950/60 border border-purple-500/40 font-mono text-[11px] text-purple-300 break-all shadow-inner">
+                SHA-256: 7f8a9e21...b4e2
+              </div>
+            </div>
 
-              {/* Checklist & Mini Applications Preview */}
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-center mb-6">
-                
-                {/* Checklist */}
-                <div className="sm:col-span-5 space-y-2.5 text-xs font-medium text-slate-300">
-                  <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Browse Tenders</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Apply Online</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Upload Documents</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Track Verification</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Respond to Clarifications</span>
-                  </div>
+            {/* Bento 3: Dual Persona Architecture (1 col) */}
+            <div className="p-8 rounded-3xl bg-slate-900/80 border border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.1)] flex flex-col justify-between hover:border-emerald-500/60 transition-all">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-extrabold mb-6 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                  <Users className="w-6 h-6" />
                 </div>
+                <span className="text-xs font-mono font-bold text-emerald-400 uppercase">Zero Conflict of Interest</span>
+                <h3 className="text-xl font-bold text-white mt-1 mb-3">
+                  Dual Persona Separation
+                </h3>
+                <p className="text-slate-400 text-xs leading-relaxed">
+                  Strict cryptographic isolation between CPCL Procurement Officers and external enterprise Bidders.
+                </p>
+              </div>
 
-                {/* Mini "My Applications" Preview Widget with Interactive Tabs */}
-                <div className="sm:col-span-7 rounded-xl bg-[#040816] border border-slate-800 p-4 text-[10px]">
-                  
-                  {/* Header */}
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-800/80 mb-2.5">
-                    <span className="font-bold text-slate-200">My Applications</span>
-                    <button 
-                      onClick={() => navigate('/bidder/login')}
-                      className="text-slate-400 hover:text-white transition-colors cursor-pointer"
-                      title="Open Applications"
-                    >
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
-                  </div>
+              <div className="mt-6 flex items-center justify-between text-xs font-bold text-emerald-300 bg-emerald-950/60 p-3.5 rounded-xl border border-emerald-500/40">
+                <span>Officer Console</span>
+                <span className="text-cyan-400">⚡</span>
+                <span>Bidder Portal</span>
+              </div>
+            </div>
+
+            {/* Bento 4: Statutory Alignment (2 cols) */}
+            <div className="md:col-span-2 p-8 rounded-3xl bg-slate-900/80 border border-white/[0.1] shadow-2xl flex flex-col justify-between hover:border-indigo-500/40 transition-all">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center font-extrabold mb-6 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+                  <Scale className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-mono font-bold text-indigo-400 uppercase">Statutory Governance</span>
+                <h3 className="text-2xl sm:text-3xl font-black text-white mt-1 mb-3">
+                  Strict GFR 2017 & CVC Compliance
+                </h3>
+                <p className="text-slate-300 text-sm leading-relaxed mb-6">
+                  Pre-configured compliance modules for General Financial Rules 2017, Public Procurement (Preference to Make in India) Order, and CPCL Works Manual.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-indigo-500/30 text-center">
+                  <span className="text-xs font-bold text-indigo-300 block">GFR 2017</span>
+                  <span className="text-[10px] text-slate-400">Rule 144 Compliant</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-blue-500/30 text-center">
+                  <span className="text-xs font-bold text-blue-300 block">CVC Guidelines</span>
+                  <span className="text-[10px] text-slate-400">Transparent Records</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-emerald-500/30 text-center">
+                  <span className="text-xs font-bold text-emerald-300 block">MSME Order</span>
+                  <span className="text-[10px] text-slate-400">Automated Relief</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bento 5: Live Activity Telemetry (2 cols) */}
+            <div className="md:col-span-2 p-8 rounded-3xl bg-slate-950 border border-cyan-500/40 shadow-[0_0_30px_rgba(6,182,212,0.15)] flex flex-col justify-between">
+              <div className="flex items-center justify-between pb-4 border-b border-white/[0.08] mb-4">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-cyan-400 animate-pulse" />
+                  <span className="text-xs font-mono font-bold text-cyan-300">REALTIME SOVEREIGN TELEMETRY</span>
+                </div>
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+              </div>
+
+              <div className="space-y-2.5 font-mono text-[11px]">
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/90 border border-white/[0.06]">
+                  <span className="text-cyan-300">● [11:28:04] GST REG-06 verified for Shakti Engineering</span>
+                  <span className="text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded">200 OK</span>
+                </div>
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/90 border border-white/[0.06]">
+                  <span className="text-purple-300">● [11:28:05] ICAI UDIN checksum validated: 24089123AAAA</span>
+                  <span className="text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded">AUTHENTIC</span>
+                </div>
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/90 border border-white/[0.06]">
+                  <span className="text-amber-300">● [11:28:06] Turnover surge alert surfaced to CPCL Officer</span>
+                  <span className="text-amber-400 font-bold bg-amber-950/80 px-2 py-0.5 rounded">FLAGGED</span>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-white/[0.08] text-[10px] text-slate-400 font-mono flex justify-between">
+                <span>System Health: 100% Operational</span>
+                <span className="text-cyan-400">Air-Gapped CPCL Cluster</span>
+              </div>
+            </div>
 
                   {/* Filter tabs - Fully interactive */}
                   <div className="flex gap-1.5 mb-2.5">
@@ -1100,92 +1429,192 @@ export default function LandingPage() {
                     ))}
                   </div>
 
-                  {/* Filtered Application Rows */}
-                  <div className="space-y-1.5">
-                    {filteredBidderApps.map((app) => (
-                      <div 
-                        key={app.id} 
-                        className="flex items-center justify-between p-2 rounded bg-slate-900/80 hover:bg-slate-800/80 transition-colors"
-                      >
-                        <div>
-                          <div className="font-bold text-white text-[9px]">{app.id}</div>
-                          <div className="text-slate-400 text-[8px]">{app.title}</div>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-[8px] font-bold ${app.badgeClass}`}>
-                          {app.status}
-                        </span>
-                      </div>
-                    ))}
-                    {filteredBidderApps.length === 0 && (
-                      <div className="py-3 text-center text-slate-500 text-[9px]">
-                        No applications in this category.
-                      </div>
-                    )}
-                  </div>
+        </div>
+      </section>
 
+      {/* ─── SECTION 6: TWO DEDICATED PORTAL ENTRY POINTS ──────────────── */}
+      <section className="py-24 bg-slate-950/70 border-y border-white/[0.08] px-4 sm:px-8 relative">
+        <div className="max-w-[1360px] mx-auto">
+          
+          <div className="text-center max-w-[800px] mx-auto mb-16">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-blue-950/70 border border-blue-500/40 text-xs font-bold text-blue-400 uppercase tracking-widest mb-4 font-mono shadow-[0_0_15px_rgba(37,99,235,0.2)]">
+              <Users className="w-3.5 h-3.5 text-blue-400" />
+              Dual-Persona Access Gateway
+            </span>
+            <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+              Select Your Authorized Workspace
+            </h2>
+            <p className="text-slate-400 text-base sm:text-lg mt-4">
+              Access the dedicated portal designed for your operational role.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-[1100px] mx-auto">
+            
+            {/* Officer Card */}
+            <div className="p-8 sm:p-10 rounded-3xl bg-slate-900/90 border-2 border-blue-500/40 shadow-[0_0_35px_rgba(37,99,235,0.2)] flex flex-col justify-between hover:border-cyan-400 transition-all">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-600/30 border border-blue-400/50 text-blue-300 text-xs font-bold mb-6 shadow-sm font-mono">
+                  <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                  CPCL PROCUREMENT OFFICERS
                 </div>
+                <h3 className="text-2xl sm:text-3xl font-black text-white mb-3">
+                  Officer Scrutiny Console
+                </h3>
+                <p className="text-slate-300 text-sm leading-relaxed mb-6">
+                  For authorized CPCL Tender Committees, Chief Vigilance Officers, and Procurement Engineers to review bids, inspect citations, and record decisions.
+                </p>
 
+                <ul className="space-y-3 text-xs text-slate-300 mb-8">
+                  <li className="flex items-center gap-2.5">
+                    <Check className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>Side-by-side original PDF citation inspector</span>
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <Check className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>Automated GFR 2017 & CPCL rule engine scorecard</span>
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <Check className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>Exportable CVC & CAG defensible audit trails</span>
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <Check className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>One-click technical qualification or rejection</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  onClick={() => handleAuthNavigate('officer-login')}
+                  className="w-full py-4 px-6 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-[0_0_30px_rgba(37,99,235,0.5)] transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                >
+                  <Lock className="w-4 h-4" />
+                  Enter Officer Console
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <div className="text-center">
+                  <button
+                    onClick={() => handleAuthNavigate('officer-register')}
+                    className="text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors"
+                  >
+                    Need official officer credentials? Request Registration &rarr;
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* CTA Button */}
-            <button
-              onClick={() => navigate('/bidder/login')}
-              className="w-full sm:w-auto self-start px-6 py-3 rounded-lg bg-[#10B981] hover:bg-[#059669] text-white font-bold text-xs shadow-md shadow-emerald-600/30 hover:shadow-emerald-600/50 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 group cursor-pointer"
-            >
-              <span>Open Bidder Portal</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </button>
+            {/* Bidder Card */}
+            <div className="p-8 sm:p-10 rounded-3xl bg-slate-900/90 border-2 border-emerald-500/40 shadow-[0_0_35px_rgba(16,185,129,0.2)] flex flex-col justify-between hover:border-emerald-400 transition-all">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-600/30 border border-emerald-400/50 text-emerald-300 text-xs font-bold mb-6 shadow-sm font-mono">
+                  <Briefcase className="w-4 h-4 text-emerald-400" />
+                  REGISTERED ENTERPRISE BIDDERS
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-black text-white mb-3">
+                  Vendor Submission Portal
+                </h3>
+                <p className="text-slate-300 text-sm leading-relaxed mb-6">
+                  For industrial manufacturers, engineering contractors, and MSME vendors submitting bids for CPCL refinery tenders.
+                </p>
+
+                <ul className="space-y-3 text-xs text-slate-300 mb-8">
+                  <li className="flex items-center gap-2.5">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Instant pre-submission compliance self-check</span>
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Immediate SHA-256 cryptographic upload receipt</span>
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Automated MSME turnover exemption claims</span>
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Transparent real-time evaluation status tracking</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  onClick={() => handleAuthNavigate('bidder-login')}
+                  className="w-full py-4 px-6 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 shadow-[0_0_30px_rgba(16,185,129,0.5)] transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                >
+                  <Briefcase className="w-4 h-4" />
+                  Enter Bidder Portal
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <div className="text-center">
+                  <button
+                    onClick={() => handleAuthNavigate('bidder-register')}
+                    className="text-xs font-semibold text-slate-400 hover:text-emerald-400 transition-colors"
+                  >
+                    New supplier to CPCL? Register Vendor Account &rarr;
+                  </button>
+                </div>
+              </div>
+            </div>
+
           </div>
 
         </div>
       </section>
 
-      {/* ─── 8. PUBLIC TENDERS ────────────────────────────────────────────── */}
-      <section id="tenders" className="py-20 px-6 sm:px-8 max-w-7xl mx-auto">
-        
-        {/* Header with Search & Filters */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-8 gap-4">
-          <div>
-            <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">
-              PUBLIC PROCUREMENT OPPORTUNITIES
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mt-1 mb-1.5">
-              Explore Active Tenders.
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-400 max-w-xl">
-              Browse the latest procurement opportunities issued by Chennai Petroleum Corporation Limited.
-            </p>
+      {/* ─── SECTION 7: LIVE PUBLIC TENDERS EXPLORER ───────────────────── */}
+      <section id="tenders" className="py-24 px-4 sm:px-8 relative">
+        <div className="max-w-[1360px] mx-auto">
+          
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
+            <div>
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-blue-950/70 border border-blue-500/40 text-xs font-bold text-blue-400 uppercase tracking-widest mb-3 font-mono shadow-[0_0_15px_rgba(37,99,235,0.2)]">
+                <Search className="w-3.5 h-3.5 text-blue-400" />
+                Public Procurement Repository
+              </span>
+              <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+                Active CPCL Tenders
+              </h2>
+              <p className="text-slate-400 text-base mt-2">
+                Explore currently open tenders across Chennai Petroleum Corporation Limited divisions.
+              </p>
+            </div>
+
+            {/* Live Counter Badge */}
+            <div className="flex items-center gap-3">
+              <div className="px-5 py-2.5 rounded-xl bg-slate-900 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)] text-xs font-bold text-slate-200">
+                <span className="text-cyan-400 font-extrabold text-base mr-1.5 font-mono">{filteredTenders.length}</span>
+                Active Tenders
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {/* View All Tenders Link */}
-            <button 
-              onClick={() => {
-                setSearchTerm('');
-                setSelectedCategory('All Categories');
-                setSelectedStatus('All Status');
-              }}
-              className="hidden lg:inline text-xs font-bold text-sky-400 hover:text-sky-300 mr-2 cursor-pointer"
-            >
-              View All Tenders →
-            </button>
-
-            {/* Search Input with Clear Button */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
+          {/* Search & Filter Bar */}
+          <div className="p-4 rounded-2xl bg-slate-900/90 border border-white/[0.1] shadow-xl mb-8 flex flex-col sm:flex-row gap-3 items-center justify-between">
+            <div className="relative w-full sm:w-96">
+              <Search className="w-4 h-4 text-cyan-400 absolute left-4 top-3.5" />
               <input
                 id="tender-search-input"
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search tenders by keyword, ID (Press /)"
-                className="w-full sm:w-64 pl-8 pr-8 py-2 bg-[#070F22] border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+                placeholder="Search by tender title, ref #, division..."
+                className="w-full pl-11 pr-4 py-2.5 text-xs font-medium bg-slate-950 border border-white/[0.12] rounded-xl focus:outline-none focus:border-cyan-500 text-white placeholder-slate-500 transition-all"
               />
-              {searchTerm && (
-                <button 
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white cursor-pointer"
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              {['ALL', 'Mechanical Equipment', 'Services & Maintenance', 'Safety & Environmental', 'IT & Automation'].map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    selectedCategory === cat
+                      ? 'bg-cyan-500 text-slate-950 shadow-[0_0_15px_rgba(6,182,212,0.5)]'
+                      : 'bg-slate-950 text-slate-400 hover:text-white border border-white/[0.08]'
+                  }`}
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -1217,75 +1646,69 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* 3 Tender Cards Matching Reference */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {filteredTenders.map((tender) => (
-            <div
-              key={tender.id}
-              className="p-6 rounded-xl bg-[#070F22] border border-slate-800/90 hover:border-slate-700 hover:bg-[#09132B] transition-all flex flex-col justify-between group shadow-lg"
-            >
-              <div>
-                {/* Status + Reference Number + Code */}
-                <div className="flex items-center justify-between gap-2 mb-3.5">
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      tender.badgeColor === 'emerald' 
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                        : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                    }`}>
-                      {tender.badge}
+          {/* Tenders Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredTenders.map(t => (
+              <div 
+                key={t.id}
+                className="p-7 rounded-2xl bg-slate-900/80 border border-white/[0.1] shadow-xl hover:border-cyan-500/50 hover:shadow-[0_0_30px_rgba(6,182,212,0.15)] transition-all flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <span className="text-[11px] font-mono font-bold text-cyan-300 bg-cyan-950/80 border border-cyan-500/40 px-2.5 py-1 rounded">
+                      {t.reference_number}
                     </span>
-                    <button
-                      onClick={() => handleCopyTenderId(tender.reference_number)}
-                      title="Click to copy tender ID"
-                      className="text-[11px] font-mono text-slate-400 hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>{tender.reference_number}</span>
-                      {copiedTenderId === tender.reference_number && (
-                        <span className="text-[9px] text-emerald-400 font-bold">✓ Copied</span>
-                      )}
-                    </button>
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-mono">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                      {t.status}
+                    </span>
                   </div>
-                  <span className="text-[11px] font-mono font-bold text-slate-500">
-                    {tender.code}
-                  </span>
+
+                  <h3 className="text-lg font-bold text-white mb-2 line-clamp-2">
+                    {t.title}
+                  </h3>
+
+                  <p className="text-xs text-slate-400 font-medium mb-5 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-cyan-400" />
+                    {t.department}
+                  </p>
+
+                  <div className="p-4 rounded-xl bg-slate-950 border border-white/[0.08] mb-5 space-y-2">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Estimated Budget:</span>
+                      <span className="font-mono font-black text-cyan-400 text-sm">
+                        ₹{(t.estimated_value / 10000000).toFixed(2)} Cr
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Submission Due:</span>
+                      <span className="font-mono font-semibold text-rose-400 flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5" />
+                        {t.submission_deadline}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Tender Title */}
-                <h3 className="text-base font-bold text-white mb-4 leading-snug group-hover:text-sky-300 transition-colors">
-                  {tender.title}
-                </h3>
+                <div className="space-y-2.5 pt-2 border-t border-white/[0.08]">
+                  <button
+                    onClick={() => setSelectedTenderModal(t)}
+                    className="w-full py-2.5 px-3.5 rounded-xl text-xs font-bold text-cyan-300 bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                    View Requirements &amp; Criteria
+                  </button>
 
-                {/* Metadata Grid */}
-                <div className="grid grid-cols-3 gap-2 pb-4 border-b border-slate-800/80 text-[11px]">
-                  <div>
-                    <div className="text-slate-500 text-[10px]">Category</div>
-                    <div className="text-slate-200 font-semibold truncate mt-0.5">{tender.category}</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-500 text-[10px]">Estimated Value</div>
-                    <div className="text-white font-bold mt-0.5">{tender.estimated_value_display}</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-500 text-[10px]">Deadline</div>
-                    <div className="text-slate-200 font-semibold mt-0.5">{tender.deadline}</div>
-                  </div>
+                  <button
+                    onClick={() => handleAuthNavigate('bidder-login')}
+                    className="w-full py-2.5 px-3.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    Direct Apply as Bidder &rarr;
+                  </button>
                 </div>
               </div>
-
-              {/* View Tender Link */}
-              <div className="pt-4">
-                <button
-                  onClick={() => setSelectedTenderModal(tender)}
-                  className="text-xs font-bold text-sky-400 hover:text-sky-300 inline-flex items-center gap-1.5 transition-colors group/link cursor-pointer"
-                >
-                  <span>View Tender</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover/link:translate-x-1 transition-transform" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
 
         {filteredTenders.length === 0 && (
           <div className="p-12 text-center bg-[#070F22] rounded-xl border border-slate-800 text-slate-400 text-xs">
@@ -1306,180 +1729,200 @@ export default function LandingPage() {
 
       </section>
 
-      {/* ─── 9. FOOTER ───────────────────────────────────────────────────── */}
-      <footer id="faq" className="bg-[#02050E] text-slate-400 pt-16 pb-12 border-t border-slate-900">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8">
+      {/* ─── SECTION 8: SOVEREIGNTY, TRUST & SECURITY GUARANTEE ────────── */}
+      <section className="py-24 bg-slate-950/70 border-y border-white/[0.08] px-4 sm:px-8 relative">
+        <div className="max-w-[1360px] mx-auto">
           
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-12 border-b border-slate-900 text-xs">
+          <div className="text-center max-w-[800px] mx-auto mb-16">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-950/70 border border-emerald-500/40 text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4 font-mono shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              Institutional Trust Guarantee
+            </span>
+            <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+              5 Pillars of Sovereign Procurement Security
+            </h2>
+            <p className="text-slate-400 text-base sm:text-lg mt-4">
+              How CPCL ensures absolute confidentiality, data sovereignty, and unyielding defense against audit queries.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
             
-            {/* Brand column */}
-            <div className="md:col-span-4 space-y-3">
-              <div className="flex items-center gap-3">
-                <CpclEmblem size={40} />
-                <div>
-                  <div className="font-extrabold text-white text-base leading-none">CPCL</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5 font-medium">Chennai Petroleum Corporation Limited</div>
-                  <div className="text-[10px] text-sky-400 font-semibold">Sovereign Procurement</div>
-                </div>
+            <div className="p-6 rounded-2xl bg-slate-900/80 border border-blue-500/30 text-left hover:border-blue-400 transition-all">
+              <div className="w-11 h-11 rounded-xl bg-blue-500/20 border border-blue-500/40 text-blue-400 flex items-center justify-center font-bold mb-4 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                <Database className="w-5 h-5" />
               </div>
-              <p className="text-[11px] text-slate-400 leading-relaxed max-w-sm">
-                Chennai Petroleum Corporation Limited, a premier refining subsidiary of Indian Oil Corporation Limited, serving India's sovereign energy sector.
+              <h3 className="text-sm font-bold text-white mb-2">On-Premise Deployment</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Deployed strictly on CPCL private infrastructure or sovereign MeitY-empaneled Indian government cloud.
               </p>
             </div>
 
-            {/* Platform */}
-            <div className="md:col-span-2 space-y-2">
-              <div className="font-bold text-slate-200">Platform</div>
-              <ul className="space-y-1.5 text-slate-400">
-                <li><a href="#workflow" className="hover:text-white transition-colors">How It Works</a></li>
-                <li><a href="#tenders" className="hover:text-white transition-colors">Procurement</a></li>
-                <li><a href="#workflow" className="hover:text-white transition-colors">Compliance</a></li>
-                <li><button onClick={() => setEvidenceModalOpen(true)} className="hover:text-white transition-colors cursor-pointer">Security</button></li>
-              </ul>
-            </div>
-
-            {/* For Officers */}
-            <div className="md:col-span-2 space-y-2">
-              <div className="font-bold text-slate-200">For Officers</div>
-              <ul className="space-y-1.5 text-slate-400">
-                <li><button onClick={() => navigate('/officer/login')} className="hover:text-white transition-colors cursor-pointer">Officer Login</button></li>
-                <li><button onClick={() => navigate('/officer/register')} className="hover:text-white transition-colors cursor-pointer">Officer Registration</button></li>
-                <li><button onClick={() => navigate('/officer/login')} className="hover:text-white transition-colors cursor-pointer">Verification</button></li>
-                <li><button onClick={() => navigate('/officer/login')} className="hover:text-white transition-colors cursor-pointer">Reports</button></li>
-              </ul>
-            </div>
-
-            {/* For Bidders */}
-            <div className="md:col-span-2 space-y-2">
-              <div className="font-bold text-slate-200">For Bidders</div>
-              <ul className="space-y-1.5 text-slate-400">
-                <li><a href="#tenders" className="hover:text-white transition-colors">Browse Tenders</a></li>
-                <li><button onClick={() => navigate('/bidder/login')} className="hover:text-white transition-colors cursor-pointer">Bidder Login</button></li>
-                <li><button onClick={() => navigate('/bidder/register')} className="hover:text-white transition-colors cursor-pointer">Bidder Registration</button></li>
-                <li><button onClick={() => navigate('/bidder/login')} className="hover:text-white transition-colors cursor-pointer">Applications</button></li>
-              </ul>
-            </div>
-
-            {/* Support & Connect */}
-            <div className="md:col-span-2 space-y-4">
-              <div className="space-y-2">
-                <div className="font-bold text-slate-200">Support</div>
-                <ul className="space-y-1.5 text-slate-400">
-                  <li><a href="#faq" className="hover:text-white transition-colors">Help</a></li>
-                  <li><a href="mailto:procurement@cpcl.gov.in" className="hover:text-white transition-colors">Contact</a></li>
-                  <li><a href="#overview" className="hover:text-white transition-colors">Accessibility</a></li>
-                </ul>
+            <div className="p-6 rounded-2xl bg-slate-900/80 border border-purple-500/30 text-left hover:border-purple-400 transition-all">
+              <div className="w-11 h-11 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-400 flex items-center justify-center font-bold mb-4 shadow-[0_0_15px_rgba(168,85,247,0.3)]">
+                <Lock className="w-5 h-5" />
               </div>
+              <h3 className="text-sm font-bold text-white mb-2">Zero Data Leakage</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Bidder proprietary filings are never sent to external commercial APIs or used to train third-party models.
+              </p>
+            </div>
 
-              <div className="space-y-2">
-                <div className="font-bold text-slate-200">Connect</div>
-                <div className="flex items-center gap-3 text-slate-400">
-                  <a href="https://linkedin.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors p-1" title="LinkedIn">
-                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
-                  </a>
-                  <a href="https://twitter.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors p-1" title="Twitter">
-                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                  </a>
-                  <a href="https://youtube.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors p-1" title="YouTube">
-                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                  </a>
-                </div>
+            <div className="p-6 rounded-2xl bg-slate-900/80 border border-cyan-500/30 text-left hover:border-cyan-400 transition-all">
+              <div className="w-11 h-11 rounded-xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 flex items-center justify-center font-bold mb-4 shadow-[0_0_15px_rgba(6,182,212,0.3)]">
+                <Search className="w-5 h-5" />
               </div>
+              <h3 className="text-sm font-bold text-white mb-2">Explainable AI</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                No black-box predictions. Every flag provides exact page coordinates and mathematical calculations.
+              </p>
             </div>
 
-          </div>
+            <div className="p-6 rounded-2xl bg-slate-900/80 border border-emerald-500/30 text-left hover:border-emerald-400 transition-all">
+              <div className="w-11 h-11 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-bold mb-4 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                <Scale className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white mb-2">CVC & CAG Defensible</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                One-click complete procurement dossiers ready for Chief Vigilance Officer scrutiny.
+              </p>
+            </div>
 
-          {/* Bottom Copyright & Links */}
-          <div className="pt-6 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 gap-4">
-            <div>
-              © 2026 Chennai Petroleum Corporation Limited. All rights reserved.
+            <div className="p-6 rounded-2xl bg-slate-900/80 border border-amber-500/30 text-left hover:border-amber-400 transition-all">
+              <div className="w-11 h-11 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center font-bold mb-4 shadow-[0_0_15px_rgba(245,158,11,0.3)]">
+                <UserCheck className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white mb-2">Officer Final Say</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                AI advises; authorized CPCL procurement officers decide. Zero automated disqualifications.
+              </p>
             </div>
-            <div className="flex items-center gap-5 text-slate-400">
-              <button onClick={() => alert('CPCL Privacy Policy adheres to Government of India Information Technology Act.')} className="hover:text-white transition-colors cursor-pointer">Privacy</button>
-              <button onClick={() => alert('General Financial Rules (GFR 2017) Terms Apply.')} className="hover:text-white transition-colors cursor-pointer">Terms</button>
-              <button onClick={() => setEvidenceModalOpen(true)} className="hover:text-white transition-colors cursor-pointer">Security</button>
-              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="hover:text-white transition-colors cursor-pointer">Sitemap</button>
-            </div>
+
           </div>
 
         </div>
-      </footer>
+      </section>
 
-      {/* ─── MODAL: HOW IT WORKS WALKTHROUGH MODAL ────────────────────────── */}
-      {howItWorksModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#070F22] rounded-2xl max-w-2xl w-full border border-sky-500/40 shadow-2xl p-6 sm:p-7 relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setHowItWorksModalOpen(false)}
-              className="absolute top-5 right-5 p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+      {/* ─── SECTION 9: FREQUENTLY ASKED QUESTIONS (ACCORDION) ─────────── */}
+      <section id="faq" className="py-24 px-4 sm:px-8 relative">
+        <div className="max-w-[900px] mx-auto">
+          
+          <div className="text-center mb-16">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-blue-950/70 border border-blue-500/40 text-xs font-bold text-blue-400 uppercase tracking-widest mb-3 font-mono shadow-[0_0_15px_rgba(37,99,235,0.2)]">
+              <HelpCircle className="w-3.5 h-3.5 text-blue-400" />
+              Clarity & Compliance
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+              Frequently Asked Questions
+            </h2>
+          </div>
 
-            <div className="flex items-center gap-2 text-sky-400 text-xs font-bold mb-1">
-              <Play className="w-4 h-4" />
-              <span>PLATFORM ARCHITECTURE & WORKFLOW</span>
+          <div className="space-y-4">
+            {faqs.map((faq, idx) => {
+              const isOpen = openFaq === idx;
+              return (
+                <div 
+                  key={idx}
+                  className="rounded-2xl bg-slate-900/80 border border-white/[0.1] overflow-hidden shadow-xl"
+                >
+                  <button
+                    onClick={() => setOpenFaq(isOpen ? -1 : idx)}
+                    className="w-full p-6 text-left flex items-center justify-between gap-4 font-bold text-sm sm:text-base text-white hover:text-cyan-300 transition-colors cursor-pointer"
+                  >
+                    <span>{faq.q}</span>
+                    {isOpen ? (
+                      <ChevronUp className="w-5 h-5 text-cyan-400 shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" />
+                    )}
+                  </button>
+
+                  {isOpen && (
+                    <div className="px-6 pb-6 pt-1 text-xs sm:text-sm text-slate-300 leading-relaxed border-t border-white/[0.08]">
+                      {faq.a}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+        </div>
+      </section>
+
+      {/* ─── SECTION 10: OFFICIAL FOOTER ───────────────────────────────── */}
+      <footer className="bg-[#02050E] text-slate-400 border-t border-white/[0.08] text-xs pt-20 pb-12 px-4 sm:px-8 relative z-20">
+        <div className="max-w-[1360px] mx-auto">
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-14">
+            
+            {/* Col 1 & 2: Platform Info */}
+            <div className="lg:col-span-2">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-400 flex items-center justify-center font-black text-white text-lg shadow-[0_0_20px_rgba(6,182,212,0.4)]">
+                  ⚡
+                </div>
+                <div>
+                  <span className="text-lg font-black text-white">BidVerify AI</span>
+                  <p className="text-[11px] text-slate-400 font-mono">CPCL Sovereign Procurement Platform</p>
+                </div>
+              </div>
+              <p className="text-slate-400 text-xs leading-relaxed max-w-[400px] mb-6">
+                Assisting Chennai Petroleum Corporation Limited (CPCL) under the Ministry of Petroleum & Natural Gas, 
+                Government of India, in achieving rapid, transparent, and legally defensible public procurement.
+              </p>
+              <div className="flex items-center gap-2 text-[11px] text-emerald-400 font-mono">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>System Status: Fully Operational (100.0% Uptime)</span>
+              </div>
             </div>
-            <h3 className="text-xl font-bold text-white mb-2">How CPCL BidVerify AI Works</h3>
-            <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-              Designed according to General Financial Rules (GFR 2017) and Central Vigilance Commission (CVC) standards for total transparency.
-            </p>
 
-            <div className="space-y-4 text-xs">
-              
-              {/* Step 1 */}
-              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex gap-3.5 items-start">
-                <div className="w-8 h-8 rounded-lg bg-blue-950 border border-blue-500/40 flex items-center justify-center text-blue-400 font-bold shrink-0 text-xs">
-                  01
-                </div>
-                <div>
-                  <h4 className="font-bold text-white text-sm">Bid Upload & Pre-Flight Validation</h4>
-                  <p className="text-slate-400 text-xs mt-0.5 leading-relaxed">
-                    Bidders upload their technical and financial submissions. The platform executes immediate integrity scans, verifies PDF digital signatures, and ensures files meet CPCL tender criteria.
-                  </p>
-                </div>
-              </div>
-
-              {/* Step 2 */}
-              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex gap-3.5 items-start">
-                <div className="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-bold shrink-0 text-xs">
-                  02
-                </div>
-                <div>
-                  <h4 className="font-bold text-white text-sm">Multi-Modal OCR & Field Extraction</h4>
-                  <p className="text-slate-400 text-xs mt-0.5 leading-relaxed">
-                    Scanned certificates (GST, PAN, Audited Balance Sheets, CA UDINs) are digitized with 98.5% precision. Over 1,200 entities are indexed with bounding box citations.
-                  </p>
-                </div>
-              </div>
-
-              {/* Step 3 */}
-              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex gap-3.5 items-start">
-                <div className="w-8 h-8 rounded-lg bg-purple-950 border border-purple-500/40 flex items-center justify-center text-purple-400 font-bold shrink-0 text-xs">
-                  03
-                </div>
-                <div>
-                  <h4 className="font-bold text-white text-sm">Deterministic Rule Compliance Engine</h4>
-                  <p className="text-slate-400 text-xs mt-0.5 leading-relaxed">
-                    Pre-set public sector rules test minimum turnover thresholds, local supplier ratios (Make in India), and statutory safety clearances without hallucination.
-                  </p>
-                </div>
-              </div>
-
-              {/* Step 4 */}
-              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex gap-3.5 items-start">
-                <div className="w-8 h-8 rounded-lg bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold shrink-0 text-xs">
-                  04
-                </div>
-                <div>
-                  <h4 className="font-bold text-white text-sm">Officer Scrutiny & Cryptographic Audit Ledger</h4>
-                  <p className="text-slate-400 text-xs mt-0.5 leading-relaxed">
-                    Procurement Officers make the final determination with explainable AI evidence. Every decision is sealed in a SHA-256 Merkle ledger for permanent scrutiny defense.
-                  </p>
-                </div>
-              </div>
-
+            {/* Col 3: Portal Links */}
+            <div>
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-4 font-mono">Portals</h4>
+              <ul className="space-y-3">
+                <li><button onClick={() => handleAuthNavigate('officer-login')} className="hover:text-cyan-300 transition-colors">Officer Console</button></li>
+                <li><button onClick={() => handleAuthNavigate('officer-register')} className="hover:text-cyan-300 transition-colors">Officer Registration</button></li>
+                <li><button onClick={() => handleAuthNavigate('bidder-login')} className="hover:text-cyan-300 transition-colors">Bidder Submission Portal</button></li>
+                <li><button onClick={() => handleAuthNavigate('bidder-register')} className="hover:text-cyan-300 transition-colors">Vendor Onboarding</button></li>
+                <li><button onClick={() => scrollToSection('tenders')} className="hover:text-cyan-300 transition-colors">Public Tender Repository</button></li>
+              </ul>
             </div>
+
+            {/* Col 4: Statutory & Compliance */}
+            <div>
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-4 font-mono">Governance</h4>
+              <ul className="space-y-3">
+                <li><span className="hover:text-slate-300">General Financial Rules (GFR) 2017</span></li>
+                <li><span className="hover:text-slate-300">Central Vigilance Commission (CVC)</span></li>
+                <li><span className="hover:text-slate-300">Make in India Policy Order</span></li>
+                <li><span className="hover:text-slate-300">ICAI CA UDIN Verification</span></li>
+                <li><span className="hover:text-slate-300">MSME Udyam Exemption Framework</span></li>
+              </ul>
+            </div>
+
+            {/* Col 5: Security Desk */}
+            <div>
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-4 font-mono">Integrity Desk</h4>
+              <p className="text-slate-400 text-xs mb-3">
+                Chief Vigilance Directorate<br />
+                CPCL Manali Refinery, Chennai - 600068
+              </p>
+              <p className="text-slate-400 text-xs font-mono mb-4">
+                Helpline: +91 44 2594 4000<br />
+                Email: vigilance@cpcl.gov.in
+              </p>
+              <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/80 border border-cyan-500/40 px-3 py-1 rounded-full shadow-xs">
+                SHA-256 Audit Trail Active
+              </span>
+            </div>
+
+          </div>
+
+          <div className="pt-8 border-t border-white/[0.08] flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-500">
+            <p>© 2026 Chennai Petroleum Corporation Limited. All rights reserved. Government of India.</p>
+            <p className="font-mono text-slate-400">CPCL-SOVEREIGN-ENGINE · v2.4.0</p>
+          </div>
 
             <div className="mt-6 pt-4 border-t border-slate-800 flex justify-end">
               <button
@@ -1495,204 +1938,196 @@ export default function LandingPage() {
 
       {/* ─── MODAL: TENDER DETAILS MODAL ─────────────────────────────────── */}
       {selectedTenderModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#070F22] rounded-2xl max-w-xl w-full border border-slate-800 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="bg-slate-900 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-white/[0.12] text-white relative max-h-[90vh] overflow-y-auto">
+            
             <button
               onClick={() => setSelectedTenderModal(null)}
-              className="absolute top-5 right-5 p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              className="absolute top-6 right-6 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <X style={{ width: '20px', height: '20px' }} />
             </button>
 
-            <div className="flex items-center gap-2 mb-2">
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                selectedTenderModal.badgeColor === 'emerald'
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-              }`}>
-                {selectedTenderModal.badge}
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-mono font-bold text-cyan-300 bg-cyan-950/80 border border-cyan-500/40 px-2.5 py-1 rounded-md">
+                {selectedTenderModal.reference_number}
               </span>
-              <span className="text-xs font-mono text-slate-400">{selectedTenderModal.reference_number}</span>
+              <span className="text-xs font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 px-2.5 py-1 rounded-full font-mono">
+                {selectedTenderModal.status}
+              </span>
             </div>
 
-            <h3 className="text-lg font-bold text-white mb-3">{selectedTenderModal.title}</h3>
+            <h3 className="text-2xl font-black text-white mb-2">
+              {selectedTenderModal.title}
+            </h3>
 
-            <div className="grid grid-cols-2 gap-3 p-3.5 rounded-lg bg-[#040816] border border-slate-800 text-xs mb-4">
+            <p className="text-xs text-slate-400 font-medium mb-6 flex items-center gap-1.5">
+              <Building2 className="w-4 h-4 text-cyan-400" />
+              {selectedTenderModal.department}
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-950 border border-white/[0.08] mb-6 text-xs">
               <div>
-                <span className="text-slate-500 text-[10px]">Estimated Contract Value:</span>
-                <div className="text-base font-bold text-white">{selectedTenderModal.estimated_value_display}</div>
+                <span className="text-slate-400 block mb-0.5">Estimated Budget:</span>
+                <span className="text-base font-black text-cyan-400 font-mono">
+                  ₹{(selectedTenderModal.estimated_value / 10000000).toFixed(2)} Cr
+                </span>
               </div>
               <div>
-                <span className="text-slate-500 text-[10px]">Submission Deadline:</span>
-                <div className="text-base font-semibold text-white">{selectedTenderModal.deadline}</div>
+                <span className="text-slate-400 block mb-0.5">Submission Deadline:</span>
+                <span className="text-base font-bold text-rose-400 font-mono">
+                  {selectedTenderModal.submission_deadline}
+                </span>
               </div>
             </div>
 
-            <div className="space-y-3.5 text-xs mb-6">
-              <div>
-                <div className="font-bold text-slate-300 mb-1">Scope of Work Specification:</div>
-                <p className="text-slate-400 leading-relaxed bg-slate-900/60 p-3 rounded-lg border border-slate-800/80">
-                  {selectedTenderModal.description}
-                </p>
-              </div>
+            <div className="mb-6">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 font-mono">
+                Scope & Description
+              </h4>
+              <p className="text-xs text-slate-300 leading-relaxed bg-slate-950 p-4 rounded-xl border border-white/[0.08]">
+                {selectedTenderModal.description}
+              </p>
+            </div>
 
-              <div>
-                <div className="font-bold text-slate-300 mb-1.5">Mandatory Statutory Eligibility:</div>
-                <div className="space-y-1.5">
-                  {selectedTenderModal.eligibility?.map((e, idx) => (
-                    <div key={idx} className="flex items-start gap-2 text-slate-300 bg-slate-900/40 p-2 rounded">
-                      <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                      <span className="leading-snug">{e}</span>
+            {selectedTenderModal.eligibility && (
+              <div className="mb-8">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5 font-mono">
+                  Mandatory Eligibility & Compliance Criteria
+                </h4>
+                <div className="space-y-2">
+                  {selectedTenderModal.eligibility.map((crit, idx) => (
+                    <div key={idx} className="flex items-center gap-2.5 text-xs text-slate-200 bg-cyan-950/40 border border-cyan-500/30 p-3 rounded-xl">
+                      <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                      <span>{crit}</span>
                     </div>
                   ))}
                 </div>
               </div>
+            )}
 
-              <div className="p-3 rounded-lg bg-blue-950/40 border border-blue-500/30 text-sky-200 text-[11px]">
-                💡 <strong>Pre-Submission Verification Guarantee:</strong> All required documents (GSTIN, PAN, CA UDIN, and Work Completion) will be validated automatically before final submission.
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-              <button
-                onClick={() => setSelectedTenderModal(null)}
-                className="px-4 py-2 rounded-lg text-xs text-slate-400 hover:text-white cursor-pointer"
-              >
-                Close Notice
-              </button>
+            <div 
+              style={{ display: 'flex', gap: '12px', paddingTop: '16px', marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}
+            >
               <button
                 onClick={() => {
                   setSelectedTenderModal(null);
                   navigate('/bidder/login');
                 }}
-                className="px-5 py-2.5 rounded-lg bg-[#0066FF] hover:bg-[#0055D4] text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-blue-600/30 cursor-pointer"
+                style={{ flex: 1, padding: '12px 20px', borderRadius: '10px', cursor: 'pointer' }}
+                className="text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all flex items-center justify-center gap-2"
               >
-                <span>Proceed to Bid</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <Briefcase className="w-4 h-4" />
+                Login to Submit Bid Proposal
+              </button>
+
+              <button
+                onClick={() => setSelectedTenderModal(null)}
+                style={{ padding: '12px 20px', borderRadius: '10px', cursor: 'pointer' }}
+                className="text-xs font-bold text-slate-400 hover:text-white bg-slate-800 transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── MODAL: VIEW EVIDENCE / AUDIT CITATIONS ──────────────────────── */}
+      {/* ─── MODAL 2: CRYPTOGRAPHIC EVIDENCE & AUDIT TRAIL MODAL ───────── */}
       {evidenceModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#070F22] rounded-2xl max-w-xl w-full border border-sky-500/40 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="bg-slate-900 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-cyan-500/40 text-white relative max-h-[90vh] overflow-y-auto font-mono">
+            
             <button
               onClick={() => setEvidenceModalOpen(false)}
-              className="absolute top-5 right-5 p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              className="absolute top-6 right-6 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <X style={{ width: '20px', height: '20px' }} />
             </button>
 
-            <div className="flex items-center gap-2 text-sky-400 text-xs font-bold mb-1">
-              <ShieldCheck className="w-4 h-4" />
-              <span>CRYPTOGRAPHIC EVIDENCE AUDIT TRAIL</span>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-bold text-cyan-300 bg-cyan-950/80 border border-cyan-500/40 px-3 py-1 rounded-md">
+                EVIDENCE CITATION INSPECTOR
+              </span>
+              <span className="text-xs text-slate-400 font-mono">REF: CPCL/PROC/2026/128</span>
             </div>
-            <h3 className="text-lg font-bold text-white mb-1.5">Shakti Engineering Bid Package #128</h3>
-            <p className="text-xs text-slate-400 mb-4">
-              CPCL Refinery Unit-3 Hydrocracker Scrutiny Ledger · Manali Complex
+
+            <h3 className="text-xl font-black text-white font-sans mb-1">
+              Shakti Engineering &amp; Infrastructure Ltd
+            </h3>
+            <p className="text-xs text-slate-400 font-sans mb-6">
+              Full cryptographic evidence payload generated by Sovereign OCR and Rule Engine.
             </p>
 
-            {/* Evidence Modal Interactive Tabs */}
-            <div className="flex gap-2 pb-3 border-b border-slate-800 mb-4 text-xs font-semibold">
-              <button
-                onClick={() => setActiveEvidenceTab('udin')}
-                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                  activeEvidenceTab === 'udin' ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                ICAI UDIN Proof
-              </button>
-              <button
-                onClick={() => setActiveEvidenceTab('gst')}
-                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                  activeEvidenceTab === 'gst' ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                GSTIN & PAN
-              </button>
-              <button
-                onClick={() => setActiveEvidenceTab('hash')}
-                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                  activeEvidenceTab === 'hash' ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Merkle Hash
-              </button>
-            </div>
-
-            <div className="space-y-3.5 text-xs">
+            <div className="space-y-4 mb-6">
               
-              {activeEvidenceTab === 'hash' && (
-                <div className="p-3.5 rounded-lg bg-[#040816] border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between text-[11px] text-slate-400">
-                    <span>SHA-256 IMMUTABLE LEDGER HASH:</span>
-                    <button onClick={handleCopyHash} className="text-sky-400 hover:underline font-bold flex items-center gap-1 cursor-pointer">
-                      <Copy className="w-3 h-3" />
-                      {copiedHash ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                  <div className="font-mono text-sky-300 text-[11px] break-all bg-slate-950 p-2.5 rounded border border-slate-900 select-all">
-                    7f8a9e21b4e7c3d5a6b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0
-                  </div>
-                  <p className="text-[10px] text-slate-500">
-                    This cryptographic hash guarantees that zero alterations can be made after submission without invalidating the audit chain.
-                  </p>
+              {/* Check 1 */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-cyan-500/30 text-xs shadow-inner">
+                <div className="flex justify-between text-cyan-300 font-bold mb-1.5">
+                  <span>1. GST REG-06 CERTIFICATE</span>
+                  <span className="text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">✓ VERIFIED</span>
                 </div>
-              )}
+                <p className="text-slate-400 text-[11px]">
+                  Extracted GSTIN: 33AAACS1429B1Z8 (State: Tamil Nadu)<br />
+                  Checksum: Valid Modulo 36 check passed.<br />
+                  Source Citation: Page 1, Coordinates [x: 142, y: 310, w: 220, h: 42]
+                </p>
+              </div>
 
-              {activeEvidenceTab === 'udin' && (
-                <div className="p-3.5 rounded-lg bg-slate-900/60 border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between font-bold text-slate-200">
-                    <span>ICAI UDIN Verification:</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-mono">
-                      GENUINE UDIN
-                    </span>
-                  </div>
-                  <div className="text-slate-300">
-                    UDIN: <strong className="text-white font-mono">26042158AAAAAB1234</strong>
-                  </div>
-                  <div className="text-slate-300">
-                    Certifying CA: <strong className="text-white">R. Sundaram & Associates (FCA 042158)</strong>
-                  </div>
-                  <div className="text-slate-300">
-                    Certified Turnover: <strong className="text-white">₹24.10 Cr</strong>
-                  </div>
-                  <div className="p-2.5 rounded bg-amber-950/40 border border-amber-500/30 text-amber-300 text-[11px] mt-2">
-                    ⚠️ <strong>YoY Revenue Spike Detected (+130.9%):</strong> System advised committee to cross-check work completion certificates before commercial L1 opening.
-                  </div>
+              {/* Check 2 */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-purple-500/30 text-xs shadow-inner">
+                <div className="flex justify-between text-purple-300 font-bold mb-1.5">
+                  <span>2. CA UDIN TURNOVER STATEMENT</span>
+                  <span className="text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded">✓ ICAI AUTHENTICATED</span>
                 </div>
-              )}
+                <p className="text-slate-400 text-[11px]">
+                  CA UDIN: 24089123AAAAAA1029<br />
+                  Turnover FY 2025-26: ₹48.60 Cr (3-Yr Avg: ₹29.36 Cr &gt; Threshold ₹25 Cr)<br />
+                  ICAI Status: Valid Active UDIN issued by Chartered Accountant M. Karthik
+                </p>
+              </div>
 
-              {activeEvidenceTab === 'gst' && (
-                <div className="p-3.5 rounded-lg bg-slate-900/60 border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between font-bold text-slate-200">
-                    <span>GSTIN REG-06 Verification:</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-mono">
-                      ACTIVE & COMPLIANT
-                    </span>
-                  </div>
-                  <div className="text-slate-300">
-                    GSTIN: <strong className="text-white font-mono">33AABCS1429B1ZX</strong> (Tamil Nadu)
-                  </div>
-                  <div className="text-slate-300">
-                    PAN: <strong className="text-white font-mono">AABCS1429B</strong> (Corporate Match)
-                  </div>
-                  <div className="text-slate-300">
-                    Taxpayer Status: <strong className="text-emerald-400">Active · Regular</strong> (Zero defaults in last 24 months)
-                  </div>
+              {/* Check 3 */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-amber-500/40 text-xs shadow-[0_0_15px_rgba(245,158,11,0.15)]">
+                <div className="flex justify-between text-amber-300 font-bold mb-1.5">
+                  <span>3. REVENUE SURGE ANOMALY</span>
+                  <span className="text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-400/40 animate-pulse">⚠️ FLAGGED FOR OFFICER</span>
                 </div>
-              )}
+                <p className="text-slate-400 text-[11px]">
+                  Variance: +130.3% surge from FY25 baseline (₹21.10 Cr to ₹48.60 Cr).<br />
+                  Rule: RULE-FIN-004 (Tolerance threshold 50%).<br />
+                  Recommendation: Procurement Officer discretion required before opening price bid.
+                </p>
+              </div>
+
+              {/* Audit Block */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-white/[0.08] text-[11px] text-slate-400 font-mono">
+                <div className="text-emerald-400 font-bold mb-1">IMMUTABLE RECORD DIGEST</div>
+                <div>Payload SHA-256: 7f8a9e210b3d819c9e821fa7b2a95c478a2e19b0d1e8432a</div>
+                <div>Timestamp: 2026-09-14T11:28:06.429Z</div>
+                <div>Signing Key: CPCL_SOVEREIGN_NODE_01 (Air-Gapped)</div>
+              </div>
 
             </div>
 
-            <div className="mt-6 pt-3 border-t border-slate-800 flex justify-between items-center text-xs">
-              <span className="text-slate-500 text-[11px]">CVC Audit Record #AUD-2026-992</span>
+            <div 
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '16px', marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}
+            >
+              <button
+                onClick={() => {
+                  setEvidenceModalOpen(false);
+                  handleAuthNavigate('officer-login');
+                }}
+                style={{ padding: '11px 22px', borderRadius: '10px', cursor: 'pointer' }}
+                className="text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all"
+              >
+                Login as Officer to Take Action &rarr;
+              </button>
+
               <button
                 onClick={() => setEvidenceModalOpen(false)}
-                className="px-5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors cursor-pointer"
+                style={{ padding: '11px 20px', borderRadius: '10px', cursor: 'pointer' }}
+                className="text-xs font-bold text-slate-400 hover:text-white bg-slate-800 transition-colors"
               >
                 Close Inspector
               </button>
