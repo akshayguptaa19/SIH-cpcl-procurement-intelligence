@@ -12,8 +12,8 @@ import { createNotification, notifyRole } from '../services/notificationService.
 
 const router = Router();
 
-// GET /api/verification/queue (Officer/Admin only)
-router.get('/queue', verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
+// GET /api/verification/queue, /cases, / (Officer/Admin only)
+router.get(['/queue', '/cases', '/'], verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
   try {
     const { status, riskLevel, search } = req.query;
     const filter = {};

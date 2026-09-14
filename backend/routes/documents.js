@@ -168,6 +168,29 @@ router.post('/upload', verifyToken, upload.single('file'), async (req, res) => {
   }
 });
 
+// GET /api/documents
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    const { applicationId, bidderId, documentType } = req.query;
+    const filter = {};
+
+    if (applicationId) filter.application_id = applicationId;
+    if (documentType) filter.document_type = documentType;
+
+    if (req.user.role === 'BIDDER') {
+      filter.bidder_id = req.user.id;
+    } else if (bidderId) {
+      filter.bidder_id = bidderId;
+    }
+
+    const docs = await Document.find(filter).sort({ uploaded_at: -1 }).lean();
+    return res.json(docs);
+  } catch (err) {
+    console.error('[Documents GET /]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/documents/:id
 router.get('/:id', verifyToken, async (req, res) => {
   try {

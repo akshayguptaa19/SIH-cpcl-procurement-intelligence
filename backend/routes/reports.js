@@ -42,6 +42,21 @@ router.get('/executive-summary', verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/reports/turnover-distribution
+router.get('/turnover-distribution', verifyToken, async (req, res) => {
+  try {
+    return res.json([
+      { bracket: "Below ₹5 Cr", count: 4, label: "Micro & Small" },
+      { bracket: "₹5 Cr - ₹15 Cr", count: 8, label: "Medium Enterprise" },
+      { bracket: "₹15 Cr - ₹50 Cr", count: 12, label: "Established Industrial" },
+      { bracket: "Above ₹50 Cr", count: 5, label: "Large EPC Conglomerate" }
+    ]);
+  } catch (err) {
+    console.error('[Reports GET /turnover-distribution]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/reports
 router.get('/', verifyToken, async (req, res) => {
   try {

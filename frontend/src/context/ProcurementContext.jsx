@@ -97,10 +97,10 @@ export function ProcurementProvider({ children }) {
       try {
         const [liveTenders, liveQueue, liveAudit, liveNotifs, liveClrs] = await Promise.allSettled([
           api.tenders.getAll(),
-          api.verification.getQueue(),
-          api.audit.getLogs({ limit: 40 }),
-          api.notifications.getAll(),
-          api.clarifications.getAll()
+          auth?.isAuthenticated ? api.verification.getQueue() : Promise.resolve([]),
+          auth?.isAuthenticated ? api.audit.getLogs({ limit: 40 }) : Promise.resolve({ logs: [] }),
+          auth?.isAuthenticated ? api.notifications.getAll() : Promise.resolve([]),
+          auth?.isAuthenticated ? api.clarifications.getAll() : Promise.resolve([])
         ]);
 
         if (liveTenders.status === 'fulfilled' && Array.isArray(liveTenders.value) && liveTenders.value.length > 0) {

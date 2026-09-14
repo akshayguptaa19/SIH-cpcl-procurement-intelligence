@@ -6,8 +6,8 @@ import { evaluateCompliance } from '../services/complianceEngine.js';
 
 const router = Router();
 
-// GET /api/compliance
-router.get('/', verifyToken, async (req, res) => {
+// GET /api/compliance, /api/compliance/rules, /api/compliance/checks
+router.get(['/', '/rules', '/checks'], verifyToken, async (req, res) => {
   try {
     const { applicationId, caseId, category, result } = req.query;
 

@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 export default function StatCard({
@@ -8,120 +8,181 @@ export default function StatCard({
   value,
   trend,
   trendType = "up",
-  iconColor = "#2563EB",
-  iconBg = "#EFF6FF",
+  iconColor = "#00A3E0",
+  iconBg = "rgba(0, 163, 224, 0.08)",
+  accentColor,
   onClick,
-  subtext
+  subtext,
+  loading = false,
+  badge
 }) {
+  const [displayValue, setDisplayValue] = useState(value);
   const isPositive = trendType === "up" || trendType === "success";
   const isNegative = trendType === "down" || trendType === "danger";
+
+  // Quick smooth number animation when value updates if numeric
+  useEffect(() => {
+    if (loading || value === undefined || value === null) return;
+    
+    // If it's a pure number or percentage, let's keep it snappy
+    setDisplayValue(value);
+  }, [value, loading]);
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          background: "#FFFFFF",
+          border: "1px solid #E2E8F0",
+          borderRadius: 14,
+          padding: "20px 22px",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          minHeight: 140
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="skeleton" style={{ width: 90, height: 14 }} />
+          <div className="skeleton" style={{ width: 38, height: 38, borderRadius: 10 }} />
+        </div>
+        <div className="skeleton" style={{ width: 120, height: 32, margin: "14px 0" }} />
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <div className="skeleton" style={{ width: 60, height: 16 }} />
+          <div className="skeleton" style={{ width: 80, height: 14 }} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
       onClick={onClick}
+      className="card-hover-lift"
       style={{
         background: "#FFFFFF",
         border: "1px solid #E2E8F0",
-        borderRadius: 12,
-        padding: "18px 20px",
-        boxShadow: "0 1px 3px 0 rgba(16, 24, 40, 0.05)",
+        borderRadius: 14,
+        padding: "20px 22px",
+        boxShadow: "0 2px 6px -1px rgba(0, 0, 0, 0.04), 0 1px 3px 0 rgba(0, 0, 0, 0.02)",
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
         cursor: onClick ? "pointer" : "default",
-        transition: "all 0.18s ease"
-      }}
-      onMouseEnter={(e) => {
-        if (onClick) {
-          e.currentTarget.style.boxShadow = "0 6px 16px -2px rgba(16, 24, 40, 0.08)";
-          e.currentTarget.style.borderColor = "#CBD5E1";
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (onClick) {
-          e.currentTarget.style.boxShadow = "0 1px 3px 0 rgba(16, 24, 40, 0.05)";
-          e.currentTarget.style.borderColor = "#E2E8F0";
-        }
+        position: "relative",
+        overflow: "hidden"
       }}
     >
-      {/* Top row: Label & Icon */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <span
+      {accentColor && (
+        <div
           style={{
-            fontSize: 12.5,
-            fontWeight: 600,
-            color: "#64748B",
-            textTransform: "uppercase",
-            letterSpacing: "0.04em"
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 3,
+            background: accentColor
           }}
-        >
-          {label}
-        </span>
+        />
+      )}
+
+      {/* Top row: Label & Icon */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#64748B",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em"
+            }}
+          >
+            {label}
+          </span>
+          {badge && (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "2px 6px",
+                borderRadius: 999,
+                background: "#F1F5F9",
+                color: "#475569"
+              }}
+            >
+              {badge}
+            </span>
+          )}
+        </div>
         {Icon && (
           <div
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
+              width: 40,
+              height: 40,
+              borderRadius: 10,
               background: iconBg,
               color: iconColor,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              flexShrink: 0
+              flexShrink: 0,
+              transition: "transform 0.2s ease"
             }}
           >
-            <Icon size={18} />
+            <Icon size={20} />
           </div>
         )}
       </div>
 
       {/* Center: Large Value */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
         <span
           style={{
-            fontSize: "28px",
+            fontSize: "30px",
             fontWeight: 800,
             color: "#0F172A",
             lineHeight: 1.1,
-            letterSpacing: "-0.02em"
+            letterSpacing: "-0.03em",
+            fontFeatureSettings: '"cv02", "cv03", "cv04", "cv11"'
           }}
         >
-          {value}
+          {displayValue}
         </span>
       </div>
 
       {/* Bottom row: Trend indicator & subtext */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 11.5 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12 }}>
         {trend && (
           <div
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: 4,
-              padding: "2px 7px",
-              borderRadius: 4,
+              padding: "3px 8px",
+              borderRadius: 6,
               fontWeight: 700,
+              fontSize: 11.5,
               background: isPositive
-                ? "#ECFDF5"
+                ? "rgba(16, 185, 129, 0.12)"
                 : isNegative
-                ? "#FEF2F2"
-                : "#F1F5F9",
+                ? "rgba(239, 68, 68, 0.12)"
+                : "rgba(100, 116, 139, 0.12)",
               color: isPositive
                 ? "#059669"
                 : isNegative
                 ? "#DC2626"
-                : "#475467"
+                : "#475569"
             }}
           >
-            {isPositive && <TrendingUp size={12} />}
-            {isNegative && <TrendingDown size={12} />}
-            {!isPositive && !isNegative && <Minus size={12} />}
+            {isPositive && <TrendingUp size={13} />}
+            {isNegative && <TrendingDown size={13} />}
+            {!isPositive && !isNegative && <Minus size={13} />}
             <span>{trend}</span>
           </div>
         )}
         {subtext && (
-          <span style={{ color: "#94A3B8", fontSize: 11 }}>
+          <span style={{ color: "#94A3B8", fontSize: 11.5, fontWeight: 500 }}>
             {subtext}
           </span>
         )}

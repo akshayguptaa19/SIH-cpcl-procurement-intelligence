@@ -623,29 +623,51 @@ export default function BidderList({ onNavigate, initialBidderId }) {
           flexWrap: "wrap",
           gap: "12px",
           borderBottom: "1px solid #e2e8f0",
-          paddingBottom: "12px"
+          paddingBottom: "14px"
         }}
       >
         {/* Risk Filters */}
-        <div style={{ display: "flex", gap: "4px" }}>
-          {["All", "Low", "Medium", "High", "Critical"].map((rf) => (
-            <button
-              key={rf}
-              onClick={() => setRiskFilter(rf)}
-              className={`pill-filter ${riskFilter === rf ? "active" : ""}`}
-            >
-              {rf === "All" ? "All Risk" : `${rf} Risk`} ({riskCounts[rf] || 0})
-            </button>
-          ))}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+          {["All", "Low", "Medium", "High", "Critical"].map((rf) => {
+            const isActive = riskFilter === rf;
+            return (
+              <button
+                key={rf}
+                onClick={() => setRiskFilter(rf)}
+                className={`btn btn-sm ${isActive ? "btn-primary" : "btn-secondary"}`}
+                style={{
+                  borderRadius: "9999px",
+                  padding: "5px 14px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  gap: "6px"
+                }}
+              >
+                <span>{rf === "All" ? "All Risk" : `${rf} Risk`}</span>
+                <span
+                  style={{
+                    fontSize: "10.5px",
+                    background: isActive ? "rgba(255,255,255,0.25)" : "#f1f5f9",
+                    color: isActive ? "#ffffff" : "#475569",
+                    padding: "1px 6px",
+                    borderRadius: "999px",
+                    fontWeight: 700
+                  }}
+                >
+                  {riskCounts[rf] || 0}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Search Input */}
-        <div style={{ position: "relative", width: "260px" }}>
+        <div style={{ position: "relative", width: "280px" }}>
           <Search
             size={14}
             style={{
               position: "absolute",
-              left: 10,
+              left: 12,
               top: "50%",
               transform: "translateY(-50%)",
               color: "#94a3b8"
@@ -655,15 +677,23 @@ export default function BidderList({ onNavigate, initialBidderId }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search company, GST, PAN, state..."
-            className="form-input"
-            style={{ paddingLeft: "32px", fontSize: "12.5px" }}
+            style={{
+              width: "100%",
+              padding: "8px 32px 8px 34px",
+              borderRadius: "10px",
+              border: "1px solid #d0d5dd",
+              fontSize: "12.5px",
+              color: "#1d2939",
+              outline: "none",
+              background: "#ffffff"
+            }}
           />
           {search && (
             <button
               onClick={() => setSearch("")}
               style={{
                 position: "absolute",
-                right: 8,
+                right: 10,
                 top: "50%",
                 transform: "translateY(-50%)",
                 background: "none",
@@ -694,8 +724,8 @@ export default function BidderList({ onNavigate, initialBidderId }) {
           <table className="saas-table">
             <thead>
               <tr>
-                <th style={{ width: "36px" }}>
-                  <span style={{ fontSize: "10px" }}>SEL</span>
+                <th style={{ width: "40px", textAlign: "center" }}>
+                  <span style={{ fontSize: "10.5px" }}>SEL</span>
                 </th>
                 <th
                   onClick={() => handleSort("name")}
@@ -710,7 +740,7 @@ export default function BidderList({ onNavigate, initialBidderId }) {
                 <th>Enrolled Tender</th>
                 <th
                   onClick={() => handleSort("compliance")}
-                  style={{ cursor: "pointer", userSelect: "none", width: "130px" }}
+                  style={{ cursor: "pointer", userSelect: "none", width: "140px" }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <span>Compliance</span>
@@ -742,44 +772,57 @@ export default function BidderList({ onNavigate, initialBidderId }) {
                     onClick={() => setSelectedBidder(bidder)}
                     style={{ background: isSelected ? "#f0f7ff" : undefined }}
                   >
-                    <td onClick={(e) => e.stopPropagation()}>
+                    <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={(e) => toggleSelectForCompare(bidder.id, e)}
-                        style={{ cursor: "pointer" }}
+                        style={{ cursor: "pointer", width: "15px", height: "15px", accentColor: "#155EEF" }}
                         title="Select for comparison"
                       />
                     </td>
                     <td>
                       <div>
-                        <div style={{ fontWeight: 600, color: "#0f172a" }}>{bidder.name}</div>
-                        <div style={{ fontSize: "11.5px", color: "#64748b" }}>
-                          {bidder.type} · {bidder.state} · Turnover: {bidder.turnover}
+                        <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "13.5px" }}>{bidder.name}</div>
+                        <div style={{ fontSize: "11.5px", color: "#64748b", marginTop: "2px" }}>
+                          {bidder.type} · {bidder.state} · <span style={{ color: "#334155", fontWeight: 500 }}>Turnover: {bidder.turnover}</span>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <div style={{ fontFamily: "monospace", fontSize: "12px", color: "#334155" }}>
+                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "12px", color: "#0f172a", fontWeight: 600 }}>
                         {bidder.gstin}
                       </div>
-                      <div style={{ fontFamily: "monospace", fontSize: "11px", color: "#94a3b8" }}>
-                        PAN: {bidder.pan}
+                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                        PAN: <span style={{ color: "#334155" }}>{bidder.pan}</span>
                       </div>
                     </td>
                     <td style={{ fontSize: "12px", color: "#475569" }}>
-                      {bidder.tender}
+                      <span style={{ fontSize: "12px", color: "#155EEF", background: "#eff8ff", padding: "3px 8px", borderRadius: "6px", border: "1px solid #d1e9ff", fontWeight: 500 }}>
+                        {bidder.tender}
+                      </span>
                     </td>
                     <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <span
                           style={{
                             fontWeight: 700,
-                            color: bidder.complianceScore >= 80 ? "#16a34a" : "#dc2626"
+                            fontSize: "13px",
+                            color: bidder.complianceScore >= 80 ? "#027a48" : bidder.complianceScore >= 50 ? "#b54708" : "#b42318"
                           }}
                         >
                           {bidder.complianceScore}%
                         </span>
+                        <div style={{ width: "45px", height: "5px", background: "#e2e8f0", borderRadius: "999px", overflow: "hidden" }}>
+                          <div
+                            style={{
+                              width: `${bidder.complianceScore}%`,
+                              height: "100%",
+                              background: bidder.complianceScore >= 80 ? "#12b76a" : bidder.complianceScore >= 50 ? "#f79009" : "#f04438",
+                              borderRadius: "999px"
+                            }}
+                          />
+                        </div>
                       </div>
                     </td>
                     <td>
@@ -791,15 +834,30 @@ export default function BidderList({ onNavigate, initialBidderId }) {
                             ? "badge-amber"
                             : "badge-red"
                         }`}
+                        style={{ fontSize: "11px" }}
                       >
-                        {bidder.riskLevel}
+                        {bidder.riskLevel} Risk
                       </span>
                     </td>
                     <td>
-                      <span className="badge badge-gray">{bidder.verificationStatus || "Verified"}</span>
+                      <span className="badge badge-gray" style={{ fontSize: "11px" }}>
+                        <ShieldCheck size={12} color="#059669" />
+                        {bidder.verificationStatus || "Verified"}
+                      </span>
                     </td>
                     <td>
-                      <span className="badge badge-blue">{bidder.status}</span>
+                      <span
+                        className={`badge ${
+                          bidder.status === "Verified" || bidder.status === "Qualified"
+                            ? "badge-blue"
+                            : bidder.status === "Under Review"
+                            ? "badge-amber"
+                            : "badge-red"
+                        }`}
+                        style={{ fontSize: "11px" }}
+                      >
+                        {bidder.status}
+                      </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <div style={{ position: "relative", display: "inline-block" }}>

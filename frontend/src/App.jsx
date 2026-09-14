@@ -386,6 +386,7 @@ function AppRoutes() {
         }
       />
       <Route path="/ai-bid-analyzer" element={<Navigate to="/ai-analyzer" replace />} />
+      <Route path="/analyzer" element={<Navigate to="/ai-analyzer" replace />} />
       <Route
         path="/audit-trail"
         element={

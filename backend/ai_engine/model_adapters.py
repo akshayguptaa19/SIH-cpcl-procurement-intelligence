@@ -6,6 +6,10 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List
+import warnings
+
+# Suppress sklearn unpickling warnings
+warnings.filterwarnings("ignore")
 
 import joblib
 # torch/transformers/PIL are intentionally NOT imported at module level.

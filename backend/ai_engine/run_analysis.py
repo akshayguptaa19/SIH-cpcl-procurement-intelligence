@@ -15,6 +15,7 @@ from pathlib import Path
 
 # Suppress warnings completely for clean stdout
 warnings.filterwarnings("ignore")
+warnings.simplefilter("ignore")
 os.environ["PYTHONWARNINGS"] = "ignore"
 
 # Ensure 'backend' directory is on sys.path

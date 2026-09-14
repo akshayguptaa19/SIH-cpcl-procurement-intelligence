@@ -7,8 +7,8 @@ import { calculateRisk } from '../services/riskEngine.js';
 
 const router = Router();
 
-// GET /api/risk/overview (Officer/Admin only)
-router.get('/overview', verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
+// GET /api/risk/overview, /summary, / (Officer/Admin only)
+router.get(['/overview', '/summary', '/'], verifyToken, requireRole(['OFFICER', 'ADMIN']), async (req, res) => {
   try {
     const cases = await VerificationCase.find({}).lean();
 

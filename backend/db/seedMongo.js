@@ -5,6 +5,14 @@ export async function seedDatabase() {
   console.log('[MongoDB Seed] Checking existing records...');
   const userCount = await User.countDocuments();
   if (userCount > 0) {
+    await User.updateOne(
+      { id: 'usr-bid-01' },
+      { $set: { email: 'contact@shaktienterprises.com' } }
+    );
+    await Company.updateOne(
+      { id: 'comp-001' },
+      { $set: { contact_email: 'contact@shaktienterprises.com' } }
+    );
     console.log('[MongoDB Seed] Database already seeded. Skipping.');
     return;
   }
@@ -89,7 +97,7 @@ export async function seedDatabase() {
       id: 'usr-bid-01',
       name: 'Rajesh Kumar',
       full_name: 'Rajesh Kumar',
-      email: 'rajesh@shaktieng.co.in',
+      email: 'contact@shaktienterprises.com',
       password_hash: bidderPasswordHash,
       role: 'BIDDER',
       status: 'ACTIVE',
@@ -121,7 +129,7 @@ export async function seedDatabase() {
       city: 'Chennai',
       state: 'Tamil Nadu',
       country: 'India',
-      contact_email: 'rajesh@shaktieng.co.in',
+      contact_email: 'contact@shaktienterprises.com',
       contact_phone: '+91 44 2836 0000'
     }
   ]);

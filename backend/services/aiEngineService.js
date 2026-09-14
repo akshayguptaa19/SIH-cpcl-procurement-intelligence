@@ -97,7 +97,28 @@ export function runAiAnalysis({
       return reject(new Error('Bidder document path is required for AI analysis.'));
     }
 
-    const resolvedDocPath = path.resolve(bidderDocumentPath);
+    let resolvedDocPath = path.resolve(bidderDocumentPath);
+    if (!fs.existsSync(resolvedDocPath)) {
+      // Fallback 1: check directly under backendRoot
+      const inBackend = path.resolve(backendRoot, bidderDocumentPath);
+      if (fs.existsSync(inBackend)) {
+        resolvedDocPath = inBackend;
+      } else {
+        // Fallback 2: check inside uploads directory
+        const stripped = bidderDocumentPath.replace(/^[\\/]?(backend[\\/])?uploads[\\/]/i, '');
+        const inUploads = path.resolve(backendRoot, 'uploads', stripped);
+        if (fs.existsSync(inUploads)) {
+          resolvedDocPath = inUploads;
+        } else {
+          // Fallback 3: check from workspace root
+          const inWorkspace = path.resolve(backendRoot, '..', bidderDocumentPath);
+          if (fs.existsSync(inWorkspace)) {
+            resolvedDocPath = inWorkspace;
+          }
+        }
+      }
+    }
+
     if (!fs.existsSync(resolvedDocPath)) {
       return reject(new Error(`Bidder document not found on server at: ${resolvedDocPath}`));
     }

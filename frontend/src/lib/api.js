@@ -212,7 +212,11 @@ export const api = {
   // Dashboard
   dashboard: {
     getStats: () => request('/dashboard/stats'),
-    getRecentActivity: () => request('/dashboard/recent-activity')
+    getRecentActivity: () => request('/dashboard/recent-activity'),
+    getChartData: () => request('/dashboard/chart-data'),
+    getRiskSignals: () => request('/dashboard/risk-signals'),
+    getComplianceDistribution: () => request('/dashboard/compliance-distribution'),
+    getAiStatus: () => request('/dashboard/ai-status')
   },
 
   // System

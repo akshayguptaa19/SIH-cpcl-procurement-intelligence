@@ -223,7 +223,7 @@ export default function AuthPage({ initialRole = 'officer', initialMode = 'login
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#F8FAFC',
+      background: '#F3F6FB',
       color: '#0F172A',
       display: 'flex',
       flexDirection: 'column',
@@ -238,7 +238,7 @@ export default function AuthPage({ initialRole = 'officer', initialMode = 'login
         left: '20%',
         width: '500px',
         height: '500px',
-        background: 'radial-gradient(circle, rgba(37, 99, 235, 0.05) 0%, rgba(248, 250, 252, 0) 70%)',
+        background: 'radial-gradient(circle, rgba(37, 99, 235, 0.10) 0%, rgba(248, 250, 252, 0) 70%)',
         borderRadius: '50%',
         pointerEvents: 'none'
       }} />
@@ -332,8 +332,8 @@ export default function AuthPage({ initialRole = 'officer', initialMode = 'login
           minHeight: '620px',
           background: '#FFFFFF',
           border: '1px solid #E2E8F0',
-          borderRadius: '24px',
-          boxShadow: '0 20px 40px -15px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)',
+          borderRadius: '20px',
+          boxShadow: '0 24px 50px -20px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.05)',
           display: 'flex',
           overflow: 'hidden'
         }}>
@@ -347,7 +347,8 @@ export default function AuthPage({ initialRole = 'officer', initialMode = 'login
             flexDirection: 'column',
             justifyContent: 'space-between',
             padding: '36px',
-            background: 'linear-gradient(145deg, #0F172A 0%, #1E293B 100%)'
+            background: 'linear-gradient(145deg, #EAF3FF 0%, #F8FBFF 55%, #EEF8F6 100%)',
+            borderRight: '1px solid #D9E2F0'
           }}>
             {/* Background 3D Artwork */}
             <img
@@ -360,8 +361,8 @@ export default function AuthPage({ initialRole = 'officer', initialMode = 'login
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
-                opacity: 0.92,
-                mixBlendMode: 'screen',
+                opacity: 0.28,
+                mixBlendMode: 'multiply',
                 pointerEvents: 'none'
               }}
             />
@@ -374,12 +375,12 @@ export default function AuthPage({ initialRole = 'officer', initialMode = 'login
                 gap: '6px',
                 padding: '5px 12px',
                 borderRadius: '20px',
-                background: 'rgba(0, 0, 0, 0.5)',
+                background: 'rgba(255, 255, 255, 0.82)',
                 backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
+                border: '1px solid #CFE0F5',
                 fontSize: '11px',
                 fontWeight: 700,
-                color: '#e0e7ff',
+                color: '#1D4ED8',
                 letterSpacing: '0.03em'
               }}>
                 <Sparkles size={12} color="#a855f7" /> Next-Gen Procurement AI
@@ -392,25 +393,25 @@ export default function AuthPage({ initialRole = 'officer', initialMode = 'login
               zIndex: 10,
               padding: '20px',
               borderRadius: '20px',
-              background: 'rgba(10, 15, 30, 0.65)',
+              background: 'rgba(255, 255, 255, 0.92)',
               backdropFilter: 'blur(16px)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+              border: '1px solid #D9E2F0',
+              boxShadow: '0 12px 28px rgba(37, 99, 235, 0.10)'
             }}>
-              <div style={{ fontSize: '20px', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', marginBottom: '6px' }}>
+              <div style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '6px' }}>
                 Instant Scrutiny. Zero Fraud.
               </div>
-              <p style={{ fontSize: '12.5px', color: '#94a3b8', lineHeight: 1.5, margin: 0 }}>
+              <p style={{ fontSize: '12.5px', color: '#64748B', lineHeight: 1.5, margin: 0 }}>
                 High-speed OCR & automated CA UDIN verification powered by sovereign intelligence.
               </p>
               <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#38bdf8', background: 'rgba(56,189,248,0.12)', padding: '3px 8px', borderRadius: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#0369A1', background: '#E0F2FE', padding: '3px 8px', borderRadius: '6px' }}>
                   ⚡ 1.4s OCR
                 </span>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#a855f7', background: 'rgba(168,85,247,0.12)', padding: '3px 8px', borderRadius: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#6D28D9', background: '#F3E8FF', padding: '3px 8px', borderRadius: '6px' }}>
                   🔒 SHA-256
                 </span>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#34d399', background: 'rgba(52,211,153,0.12)', padding: '3px 8px', borderRadius: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#047857', background: '#D1FAE5', padding: '3px 8px', borderRadius: '6px' }}>
                   ✓ 99.2% Accuracy
                 </span>
               </div>

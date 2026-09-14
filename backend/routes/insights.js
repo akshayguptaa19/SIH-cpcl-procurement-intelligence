@@ -4,8 +4,8 @@ import { verifyToken, requireRole } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-// GET /api/insights
-router.get('/', verifyToken, async (req, res) => {
+// GET /api/insights, /patterns
+router.get(['/', '/patterns'], verifyToken, async (req, res) => {
   try {
     const { entityType, entityId, severity } = req.query;
 
